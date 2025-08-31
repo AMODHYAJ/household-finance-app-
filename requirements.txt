@@ -1,0 +1,16 @@
+# ---- Core Python ----
+python-dotenv
+pandas
+numpy
+rich
+python-dateutil
+
+# ---- Database ----
+SQLAlchemy
+bcrypt
+
+# ---- Visualization ----
+matplotlib
+
+# ---- (Optional) LLM ----
+openai
