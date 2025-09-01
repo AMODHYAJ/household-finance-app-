@@ -11,6 +11,11 @@ bcrypt
 
 # ---- Visualization ----
 matplotlib
+plotly
+
+# ---- Streamlit GUI ----
+streamlit
+pillow
 
 # ---- (Optional) LLM ----
 openai
