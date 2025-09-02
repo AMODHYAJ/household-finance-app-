@@ -1,9 +1,11 @@
 # ---- Core Python ----
-python-dotenv
+streamlit
 pandas
+plotly
 numpy
-rich
-python-dateutil
+scikit-learn
+
+
 
 # ---- Database ----
 SQLAlchemy
