@@ -1,0 +1,27 @@
+date,type,amount,category,note
+2024-01-05,income,3000,Salary,Monthly salary
+2024-01-07,expense,200,Food,Lunch with friends
+2024-01-10,expense,120,Transport,Bus pass
+2024-01-15,expense,450,Rent,January rent payment
+2024-01-20,expense,80,Entertainment,Movie night
+2024-01-25,income,500,Freelance,Freelance project
+2024-02-02,expense,220,Food,Weekly groceries
+2024-02-05,income,3100,Salary,Monthly salary
+2024-02-08,expense,150,Transport,Taxi to airport
+2024-02-12,expense,470,Rent,February rent
+2024-02-15,expense,300,Shopping,New shoes
+2024-02-25,expense,60,Entertainment,Cinema
+2024-03-01,income,3200,Salary,Monthly salary
+2024-03-05,expense,250,Food,Dinner with family
+2024-03-08,expense,140,Transport,Fuel
+2024-03-10,expense,480,Rent,March rent
+2024-03-12,expense,350,Shopping,Clothes
+2024-03-20,expense,75,Entertainment,Concert tickets
+2024-03-25,income,600,Freelance,Freelance work
+2024-04-01,income,3200,Salary,Monthly salary
+2024-04-04,expense,260,Food,Groceries
+2024-04-08,expense,130,Transport,Fuel refill
+2024-04-12,expense,480,Rent,April rent
+2024-04-15,expense,400,Shopping,New headphones
+2024-04-18,expense,90,Entertainment,Bowling
+2024-04-25,income,700,Freelance,App development

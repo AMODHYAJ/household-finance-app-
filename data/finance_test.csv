@@ -1,0 +1,15 @@
+date,type,amount,category,note
+2024-05-01,income,3300,Salary,Monthly salary
+2024-05-05,expense,240,Food,Grocery shopping
+2024-05-08,expense,160,Transport,Fuel
+2024-05-12,expense,500,Rent,May rent
+2024-05-15,expense,380,Shopping,New jacket
+2024-05-18,expense,95,Entertainment,Movie and snacks
+2024-05-25,income,650,Freelance,Freelance writing
+2024-06-01,income,3300,Salary,Monthly salary
+2024-06-03,expense,270,Food,Groceries
+2024-06-07,expense,145,Transport,Taxi ride
+2024-06-10,expense,500,Rent,June rent
+2024-06-12,expense,420,Shopping,Sports gear
+2024-06-20,expense,100,Entertainment,Amusement park
+2024-06-25,income,600,Freelance,Website project
