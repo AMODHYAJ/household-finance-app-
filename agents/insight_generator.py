@@ -1,59 +1,76 @@
-from collections import defaultdict
-from config.settings import OPENAI_API_KEY
-from datetime import date
+import pandas as pd
+import os
+from models.expense_predictor import ExpensePredictor
+from models.anomaly_detector import AnomalyDetector
+from models.category_classifier import CategoryClassifier
+from models.budget_recommender import BudgetRecommender
 
 class InsightGeneratorAgent:
-    def __init__(self, data_agent):
+    def __init__(self, data_agent=None, model_dir="models/"):
         self.data_agent = data_agent
+        self.model_dir = model_dir
+        os.makedirs(model_dir, exist_ok=True)
 
-    def summarize(self):
-        df = self.data_agent.get_transactions_df()
+        # Load models
+        self.expense_predictor = ExpensePredictor(model_path=os.path.join(model_dir, "expense_predictor.pkl"))
+        self.anomaly_detector = AnomalyDetector(model_path=os.path.join(model_dir, "anomaly_detector.pkl"))
+        self.category_classifier = CategoryClassifier(model_path=os.path.join(model_dir, "category_classifier.pkl"))
+        self.budget_recommender = BudgetRecommender()
+
+    def summarize(self, df):
         if df is None or df.empty:
-            print("No transactions yet.")
-            return
+            return "No transactions yet."
         total_income = df[df["type"] == "income"]["amount"].sum()
         total_expense = df[df["type"] == "expense"]["amount"].sum()
-        savings = total_income - total_expense
-        print("----- Summary -----")
-        print(f"Total Income : {total_income:.2f}")
-        print(f"Total Expense: {total_expense:.2f}")
-        print(f"Savings      : {savings:.2f}")
+        return {
+            "Total Income": round(total_income, 2),
+            "Total Expense": round(total_expense, 2),
+            "Savings": round(total_income - total_expense, 2)
+        }
 
-    def highest_expense_category(self):
-        df = self.data_agent.get_transactions_df()
-        exp = df[df["type"] == "expense"]
-        if exp.empty:
-            print("No expenses recorded.")
-            return
-        grp = exp.groupby("category")["amount"].sum().sort_values(ascending=False)
-        top_cat = grp.index[0]
-        print(f"Highest expense category: {top_cat} ({grp.iloc[0]:.2f})")
-
-    # (Optional for mid) simple “reasoned” text without API
-    def simple_insights(self):
-        df = self.data_agent.get_transactions_df()
+    def generate_insights(self, df):
         if df is None or df.empty:
-            print("No transactions to analyze.")
-            return
-        lines = []
-        # savings trend rough check
+            return ["No data available."]
+
+        insights = []
+
+        # Income vs Expense check
         income = df[df["type"] == "income"]["amount"].sum()
         expense = df[df["type"] == "expense"]["amount"].sum()
-        if expense > income:
-            lines.append("You spent more than you earned. Consider a stricter budget next month.")
-        else:
-            lines.append("Great! You saved money overall. Look for categories to optimize further.")
-        # spike detection (very simple)
-        import pandas as pd
-        exp = df[df["type"] == "expense"].copy()
-        if not exp.empty:
-            exp["month"] = pd.to_datetime(exp["date"]).dt.to_period("M").astype(str)
-            by_month = exp.groupby("month")["amount"].sum().sort_index()
-            if len(by_month) >= 2:
-                last, prev = by_month.iloc[-1], by_month.iloc[-2]
-                delta = last - prev
-                if delta > 0 and prev > 0 and delta / prev > 0.25:
-                    lines.append(f"Expense spike: last month increased by {delta:.2f} (~{(delta/prev)*100:.1f}%).")
-        print("----- Insights -----")
-        for L in lines:
-            print("-", L)
+        insights.append("⚠ You spent more than you earned." if expense > income else "✅ You saved money overall.")
+
+        # Expense prediction
+        try:
+            last_date = pd.to_datetime(df["date"]).max()
+            next_month = (last_date.month % 12) + 1
+            next_year = last_date.year + (1 if last_date.month == 12 else 0)
+            pred = self.expense_predictor.predict_next_month(next_month, next_year)
+            insights.append(f"📅 Predicted expenses for {next_month}/{next_year}: ${pred:.2f}")
+        except Exception:
+            insights.append("⚠ Prediction unavailable.")
+
+        # Anomaly detection
+        try:
+            anomalies = self.anomaly_detector.detect(df)
+            if not anomalies.empty:
+                a = anomalies.iloc[-1]
+                insights.append(f"🚨 Anomaly: {a['category']} - ${a['amount']:.2f} on {a['date']}")
+        except Exception:
+            insights.append("⚠ Anomaly detection unavailable.")
+
+        # Category classifier
+        try:
+            if "note" in df.columns and not df["note"].dropna().empty:
+                note = df["note"].dropna().iloc[-1]
+                pred_cat = self.category_classifier.predict(note)
+                insights.append(f"📝 Last note '{note}' classified as '{pred_cat}'")
+        except Exception:
+            insights.append("⚠ Classification unavailable.")
+
+        # Budget recommendations
+        try:
+            insights.extend(self.budget_recommender.recommend(df))
+        except Exception:
+            insights.append("⚠ Recommendations unavailable.")
+
+        return insights

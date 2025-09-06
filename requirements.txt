@@ -19,3 +19,6 @@ pillow
 
 # ---- (Optional) LLM ----
 openai
+
+scikit-learn 
+joblib
