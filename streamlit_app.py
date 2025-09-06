@@ -447,103 +447,96 @@ def charts_page():
 def insights_page():
     if not check_auth():
         return
-        
+
     st.header("🧠 AI-Powered Insights")
-    
+
     insight_agent = st.session_state.architect_agent.insight_agent
     data_agent = st.session_state.architect_agent.data_agent
     df = data_agent.get_transactions_df()
-    
+
     if df is not None and not df.empty:
-        # Insight tabs
+        # Tabs for different insights
         tab1, tab2, tab3 = st.tabs(["📊 Summary", "🎯 Category Analysis", "🤖 AI Insights"])
-        
+
+        # --- TAB 1: SUMMARY ---
         with tab1:
             st.subheader("Financial Summary")
-            
+
             total_income = df[df["type"] == "income"]["amount"].sum()
             total_expense = df[df["type"] == "expense"]["amount"].sum()
             savings = total_income - total_expense
-            
+
             col1, col2, col3 = st.columns(3)
             with col1:
                 st.metric("Total Income", f"${total_income:,.2f}")
             with col2:
                 st.metric("Total Expenses", f"${total_expense:,.2f}")
             with col3:
-                savings_color = "normal" if savings >= 0 else "inverse"
-                st.metric("Net Savings", f"${savings:,.2f}", 
-                         delta=f"${savings:,.2f}", delta_color=savings_color)
-            
-            # Savings rate
+                delta_color = "normal" if savings >= 0 else "inverse"
+                st.metric("Net Savings", f"${savings:,.2f}",
+                          delta=f"${savings:,.2f}", delta_color=delta_color)
+
             if total_income > 0:
                 savings_rate = (savings / total_income) * 100
                 st.metric("Savings Rate", f"{savings_rate:.1f}%")
-        
+
+        # --- TAB 2: CATEGORY ANALYSIS ---
         with tab2:
             st.subheader("Category Analysis")
-            
+
             expenses_df = df[df["type"] == "expense"]
             if not expenses_df.empty:
                 category_analysis = expenses_df.groupby("category")["amount"].agg(['sum', 'mean', 'count'])
                 category_analysis.columns = ['Total', 'Average', 'Count']
                 category_analysis = category_analysis.sort_values('Total', ascending=False)
-                
-                st.dataframe(category_analysis.style.format({
-                    'Total': '${:,.2f}',
-                    'Average': '${:,.2f}'
-                }), width='stretch')
-                
-                # Highest expense category
+
+                st.dataframe(
+                    category_analysis.style.format({
+                        'Total': '${:,.2f}',
+                        'Average': '${:,.2f}'
+                    }),
+                    use_container_width=True
+                )
+
+                # Highlight top category
                 top_category = category_analysis.index[0]
                 top_amount = category_analysis.loc[top_category, 'Total']
-                st.info(f"🎯 Highest expense category: *{top_category}* (${top_amount:,.2f})")
-        
+                st.info(f"🎯 Highest expense category: **{top_category}** (${top_amount:,.2f})")
+            else:
+                st.warning("No expense data available for category analysis.")
+
+        # --- TAB 3: AI INSIGHTS ---
         with tab3:
             st.subheader("AI-Generated Insights")
-            
-            if st.button("Generate AI Insights", type="primary"):
+
+            if st.button("✨ Generate AI Insights", type="primary"):
                 with st.spinner("Analyzing your financial data..."):
-                    # Generate insights using your insight agent
-                    insights = []
-                    
-                    # Basic insights
-                    if total_expense > total_income:
-                        insights.append("⚠ You spent more than you earned. Consider creating a stricter budget for next month.")
-                    else:
-                        insights.append("✅ Great! You saved money overall. Look for categories to optimize further.")
-                    
-                    # Category insights
-                    if not expenses_df.empty:
-                        top_categories = expenses_df.groupby("category")["amount"].sum().nlargest(3)
-                        insights.append(f"💡 Your top 3 expense categories are: {', '.join(top_categories.index.tolist())}")
-                    
-                    # Trend analysis
-                    if len(df) >= 5:
-                        recent_expenses = expenses_df.tail(5)["amount"].mean()
-                        all_expenses_avg = expenses_df["amount"].mean()
-                        if recent_expenses > all_expenses_avg * 1.2:
-                            insights.append("📈 Your recent expenses are higher than average. Monitor your spending closely.")
-                        elif recent_expenses < all_expenses_avg * 0.8:
-                            insights.append("📉 Good news! Your recent expenses are below average.")
-                    
-                    # Display insights
-                    for i, insight in enumerate(insights, 1):
-                        st.write(f"{i}. {insight}")
-                    
-                    # Additional recommendations
-                    st.subheader("💡 Recommendations")
-                    recommendations = [
-                        "Set up automatic savings transfers to build an emergency fund",
-                        "Review and negotiate recurring subscriptions and bills",
-                        "Consider using the 50/30/20 budgeting rule",
-                        "Track daily expenses to identify spending patterns"
-                    ]
-                    
-                    for rec in recommendations:
-                        st.write(f"• {rec}")
+                    try:
+                        # Use your custom agent to generate insights
+                        insights = insight_agent.generate_insights(df)
+
+                        if insights:
+                            for i, insight in enumerate(insights, 1):
+                                st.write(f"{i}. {insight}")
+                        else:
+                            st.info("No significant insights generated. Try adding more data.")
+
+                        # Additional recommendations
+                        st.subheader("💡 Recommendations")
+                        recommendations = [
+                            "Set up automatic savings transfers to build an emergency fund",
+                            "Review and negotiate recurring subscriptions and bills",
+                            "Consider applying the 50/30/20 budgeting rule",
+                            "Track daily expenses to identify spending patterns"
+                        ]
+                        for rec in recommendations:
+                            st.write(f"• {rec}")
+
+                    except Exception as e:
+                        st.error(f"❌ Failed to generate insights: {str(e)}")
     else:
         st.info("No data available for insights. Add some transactions first!")
+
 
 def logout():
     st.session_state.logged_in = False
