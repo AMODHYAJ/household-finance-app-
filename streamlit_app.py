@@ -450,7 +450,6 @@ def insights_page():
 
     st.header("🧠 AI-Powered Financial Insights")
 
-    insight_agent = st.session_state.architect_agent.insight_agent
     data_agent = st.session_state.architect_agent.data_agent
     df = data_agent.get_transactions_df()
 
@@ -458,8 +457,16 @@ def insights_page():
         st.info("No data available for insights. Add some transactions first!")
         return
 
-    # Tabs: Overview, Deep Dive, AI Insights
-    tab1, tab2, tab3 = st.tabs(["📊 Overview", "🔍 Deep Dive", "🤖 AI Insights & Recommendations"])
+    # Initialize Insight Generator
+    from agents.insight_generator import InsightGeneratorAgent
+    gen = InsightGeneratorAgent(df)
+    results = gen.generate_all()
+
+    # ---------------- 2-TAB STRUCTURE ----------------
+    tab1, tab2 = st.tabs([
+        "📊 Overview",
+        "🔍 Insights & Risks"
+    ])
 
     # ---------------- TAB 1: OVERVIEW ----------------
     with tab1:
@@ -476,95 +483,61 @@ def insights_page():
         with col3: st.metric("Net Savings", f"${savings:,.2f}")
         with col4: st.metric("Savings Rate", f"{savings_rate:.1f}%")
 
-        # Gauge chart: Spending vs Income
-        fig_gauge = go.Figure(go.Indicator(
-            mode="gauge+number+delta",
-            value=total_expense,
-            delta={"reference": total_income, "relative": True, "valueformat": ".0%"},
-            gauge={
-                "axis": {"range": [0, max(total_income * 1.2, total_expense * 1.2)]},
-                "bar": {"color": "red"},
-                "steps": [
-                    {"range": [0, total_income * 0.5], "color": "lightgreen"},
-                    {"range": [total_income * 0.5, total_income], "color": "yellow"},
-                    {"range": [total_income, max(total_income * 1.2, total_expense * 1.2)], "color": "lightcoral"},
-                ],
-            },
-            title={"text": "Spending vs Income"}
-        ))
-        st.plotly_chart(fig_gauge, use_container_width=True)
+        # At-a-glance summary
+        if savings_rate > 20:
+            st.success("💡 Great! You're saving above your usual rate.")
+        elif 10 <= savings_rate <= 20:
+            st.info("💡 Keep tracking! Your savings rate is steady.")
+        else:
+            st.warning("⚠️ Savings rate is low. Consider adjusting expenses.")
 
-        # Financial Health Score
-        health_score = insight_agent.calculate_health_score(df)
-        st.metric("💡 Financial Health Score", f"{health_score}/100")
-        st.caption("This score reflects balance, savings rate, and spending patterns.")
-
-    # ---------------- TAB 2: DEEP DIVE ----------------
+    # ---------------- TAB 2: INSIGHTS & RISKS ----------------
     with tab2:
-        st.subheader("Anomalies & Risk Areas")
+        st.subheader("AI-Generated Insights & Anomaly Detection")
 
-        anomalies = insight_agent.detect_anomalies(df)
+        # Responsible AI Checks
+        st.markdown("### ⚖️ Responsible AI Checks")
+        for issue in results.get("responsible_ai", []):
+            if "✅" in issue:
+                st.success(issue)
+            else:
+                st.warning(issue)
+        st.divider()
+
+        # Anomalies
+        st.markdown("### ⚠️ Anomalies")
+        anomalies = results.get("anomalies")
         if anomalies is not None and not anomalies.empty:
-            st.warning(f"⚠️ {len(anomalies)} anomalies detected in spending patterns")
+            st.warning(f"{len(anomalies)} anomalies detected in spending patterns")
             st.dataframe(anomalies.head(10), use_container_width=True)
+        else:
+            st.info("No anomalies detected.")
 
-            # Trend deviation chart
-            df_copy = df.copy()
-            df_copy["date"] = pd.to_datetime(df_copy["date"])
-            monthly_expenses = df_copy[df_copy["type"] == "expense"].groupby(df_copy["date"].dt.to_period("M"))["amount"].sum()
-            monthly_expenses.index = monthly_expenses.index.astype(str)
+        # Savings Forecast
+        st.markdown("### 🔮 Savings Forecast")
+        forecast = results.get("savings_forecast")
+        if forecast:
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("Last Month Expenses", f"${forecast.get('last_month',0):.2f}")
+            with col2:
+                st.metric("Forecast Next Month", f"${forecast.get('forecast_next_month',0):.2f}")
+        else:
+            st.info("Not enough data to forecast savings.")
 
-            fig_trend = go.Figure()
-            fig_trend.add_trace(go.Scatter(x=monthly_expenses.index, y=monthly_expenses.values,
-                                           mode="lines+markers", name="Monthly Expenses"))
-            # Highlight anomalies
-            anomaly_months = anomalies["date"].astype(str).tolist()
-            anomaly_values = anomalies["amount"].tolist()
-            if anomaly_months:
-                fig_trend.add_trace(go.Scatter(
-                    x=anomaly_months, y=anomaly_values,
-                    mode="markers", name="Anomalies",
-                    marker=dict(color="red", size=12, symbol="x")
-                ))
-            fig_trend.update_layout(title="Monthly Expense Trend with Anomalies")
-            st.plotly_chart(fig_trend, use_container_width=True)
+        # Budget Recommendations
+        st.markdown("### 💡 Budget Recommendations")
+        recs = results.get("budget_recommendations")
+        if recs is not None and hasattr(recs, 'head') and not recs.empty:
+            st.dataframe(recs, use_container_width=True)
+        else:
+            st.info("No recommendations available.")
 
-        # Risk/Opportunity Heatmap
-        risk_df = insight_agent.category_risk_analysis(df)
-        if not risk_df.empty:
-            fig_heat = px.imshow(
-                [risk_df["risk_score"].values],
-                labels=dict(x=list(risk_df["category"]), color="Risk Level"),
-                color_continuous_scale="RdYlGn_r",
-                aspect="auto"
-            )
-            st.plotly_chart(fig_heat, use_container_width=True)
-            st.caption("Red = Higher risk (overspending), Green = Safe zones.")
-
-    # ---------------- TAB 3: AI INSIGHTS ----------------
-    with tab3:
-        st.subheader("AI-Generated Insights & Recommendations")
-
-        if st.button("✨ Generate Insights", type="primary"):
-            with st.spinner("Analyzing your financial data..."):
-                try:
-                    insights = insight_agent.generate_insights(df)
-                    if insights:
-                        for i, insight in enumerate(insights, 1):
-                            st.markdown(f"**{i}. {insight}**")
-                    else:
-                        st.info("No significant insights generated. Try adding more data.")
-
-                    st.divider()
-                    st.subheader("💡 Smart Recommendations")
-                    recommendations = insight_agent.generate_recommendations(df)
-                    for rec in recommendations:
-                        st.write(f"• {rec}")
-
-                    st.caption("⚖️ These recommendations are AI-assisted. Final financial decisions should consider personal context.")
-
-                except Exception as e:
-                    st.error(f"❌ Failed to generate insights: {str(e)}")
+        # Expense Trend (from Insight Generator)
+        trend_path = results.get("expense_trend_chart")
+        if trend_path:
+            st.markdown("### 📈 Expense Trend")
+            st.image(trend_path, caption="Monthly Expense Trend", use_container_width=True)
 
 
 def logout():
