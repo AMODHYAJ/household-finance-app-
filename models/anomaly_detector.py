@@ -10,6 +10,7 @@ class AnomalyDetector:
     def train(self, df):
         expenses = df[df["type"] == "expense"].copy()
         if expenses.empty:
+            print("⚠️ No expense data available for anomaly detection training.")
             return
 
         X = expenses[["amount"]]

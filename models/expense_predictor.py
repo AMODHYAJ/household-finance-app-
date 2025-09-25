@@ -15,6 +15,10 @@ class ExpensePredictor:
         df["year"] = df["date"].dt.year
         monthly = df.groupby(["year", "month"])["amount"].sum().reset_index()
 
+        if monthly.empty:
+            print("⚠️ Not enough data to train Expense Predictor.")
+            return
+
         X = monthly[["year", "month"]]
         y = monthly["amount"]
 
@@ -38,6 +42,9 @@ class ExpensePredictor:
         test_df["month"] = test_df["date"].dt.month
         test_df["year"] = test_df["date"].dt.year
         monthly = test_df.groupby(["year", "month"])["amount"].sum().reset_index()
+
+        if monthly.empty:
+            return float("nan")
 
         if self.model is None:
             with open(self.model_path, "rb") as f:

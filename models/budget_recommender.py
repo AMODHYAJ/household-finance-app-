@@ -12,9 +12,9 @@ class BudgetRecommender:
     def train(self, df):
         expenses = df[df["type"] == "expense"].copy()
         if expenses.empty:
+            print("⚠️ Not enough data to train Budget Recommender.")
             return
 
-        # Monthly category spending profile
         expenses["date"] = pd.to_datetime(expenses["date"])
         expenses["month"] = expenses["date"].dt.to_period("M")
         pivot = expenses.pivot_table(
@@ -24,6 +24,9 @@ class BudgetRecommender:
             aggfunc="sum",
             fill_value=0
         )
+
+        if pivot.empty:
+            return
 
         self.scaler = StandardScaler()
         X_scaled = self.scaler.fit_transform(pivot)
@@ -53,9 +56,7 @@ class BudgetRecommender:
         last_month = expenses["date"].dt.to_period("M").max()
         pivot = expenses[expenses["date"].dt.to_period("M") == last_month]
 
-        # Add month column before pivot
         pivot["month"] = pivot["date"].dt.to_period("M")
-
         pivot = pivot.pivot_table(
             index="month",
             columns="category",
@@ -71,7 +72,6 @@ class BudgetRecommender:
             X_scaled = self.scaler.transform(pivot)
             cluster = self.model.predict(X_scaled)[0]
         except Exception:
-            # fallback if scaling/predict fails
             return ["⚠ Unable to analyze spending patterns. Consider adding more data."]
 
         recs = []
@@ -82,7 +82,6 @@ class BudgetRecommender:
         elif cluster == 2:
             recs.append("⚠ You have irregular big expenses. Build an emergency fund to stay safe.")
 
-        # Always add a fallback tip so it's never empty
         if not recs:
             recs.append("📌 Maintain consistent tracking of income & expenses to improve recommendations.")
 

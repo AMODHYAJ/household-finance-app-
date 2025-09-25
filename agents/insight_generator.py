@@ -5,6 +5,10 @@ from models.anomaly_detector import AnomalyDetector
 from models.category_classifier import CategoryClassifier
 from models.budget_recommender import BudgetRecommender
 
+def mask_sensitive_text(text, max_length=10):
+    """Mask sensitive financial notes for privacy."""
+    return (text[:max_length] + "...") if len(text) > max_length else text
+
 class InsightGeneratorAgent:
     def __init__(self, data_agent=None, model_dir="models/"):
         self.data_agent = data_agent
@@ -28,6 +32,12 @@ class InsightGeneratorAgent:
             "Savings": round(total_income - total_expense, 2)
         }
 
+    def safe_summary(self, df):
+        """Return summaries without exposing raw transaction details."""
+        summary = self.summarize(df)
+        summary["Privacy Note"] = "Only totals shown. Individual transactions remain private."
+        return summary
+
     def generate_insights(self, df):
         if df is None or df.empty:
             return ["No data available."]
@@ -46,6 +56,7 @@ class InsightGeneratorAgent:
             next_year = last_date.year + (1 if last_date.month == 12 else 0)
             pred = self.expense_predictor.predict_next_month(next_month, next_year)
             insights.append(f"📅 Predicted expenses for {next_month}/{next_year}: ${pred:.2f}")
+            insights.append("ℹ️ Transparency: Prediction based on past monthly spending trends (RandomForest).")
         except Exception:
             insights.append("⚠ Prediction unavailable.")
 
@@ -55,6 +66,7 @@ class InsightGeneratorAgent:
             if not anomalies.empty:
                 a = anomalies.iloc[-1]
                 insights.append(f"🚨 Anomaly: {a['category']} - ${a['amount']:.2f} on {a['date']}")
+                insights.append("ℹ️ Transparency: Anomalies flagged using Isolation Forest on spending patterns.")
         except Exception:
             insights.append("⚠ Anomaly detection unavailable.")
 
@@ -63,13 +75,16 @@ class InsightGeneratorAgent:
             if "note" in df.columns and not df["note"].dropna().empty:
                 note = df["note"].dropna().iloc[-1]
                 pred_cat = self.category_classifier.predict(note)
-                insights.append(f"📝 Last note '{note}' classified as '{pred_cat}'")
+                insights.append(f"📝 Last note '{mask_sensitive_text(note)}' classified as '{pred_cat}'")
+                insights.append("ℹ️ Transparency: Classification uses TF-IDF + Logistic Regression on note text.")
         except Exception:
             insights.append("⚠ Classification unavailable.")
 
         # Budget recommendations
         try:
-            insights.extend(self.budget_recommender.recommend(df))
+            recs = self.budget_recommender.recommend(df)
+            insights.extend(recs)
+            insights.append("ℹ️ Transparency: Recommendations are based on spending cluster analysis.")
         except Exception:
             insights.append("⚠ Recommendations unavailable.")
 
