@@ -4,12 +4,18 @@ from core.database import SessionLocal, init_db, User, Transaction, Household
 from core.security import hash_password, verify_password
 from core.schemas import TransactionIn
 from core.utils import parse_date
+from models.category_classifier import CategoryClassifier
+
+import pandas as pd
+import json
+
 
 class DataCollectorAgent:
     def __init__(self):
         init_db()
         self.db: Session = SessionLocal()
         self.current_user: User | None = None
+        self.classifier = CategoryClassifier()
 
     # ---------- Auth ----------
     def register_user(self):
@@ -46,6 +52,7 @@ class DataCollectorAgent:
         except IntegrityError:
             self.db.rollback()
             print("❌ Username already exists.")
+
     def delete_user_data(self):
         if not self.current_user or self.current_user.role != "admin":
             print("❌ Only admin users can delete data.")
@@ -74,31 +81,58 @@ class DataCollectorAgent:
         if not self.current_user:
             print("Please login first.")
             return
+
+        # Basic input
         t_type = input("Type (income/expense): ").strip().lower()
-        category = input("Category (food, bills, etc.): ").strip()
+        if t_type not in ["income", "expense"]:
+            print("❌ Invalid type. Must be 'income' or 'expense'.")
+            return
+
+        category = input("Category (leave blank for auto): ").strip()
         amount_s = input("Amount: ").strip()
         date_s = input("Date (YYYY-MM-DD): ").strip()
         note = input("Note (optional): ").strip()
+
+        # Validation
         try:
-            data = TransactionIn(
-                t_type=t_type,
-                category=category,
-                amount=float(amount_s),
-                date=parse_date(date_s),
-                note=note or None
-            )
+            amount = float(amount_s)
+            if amount <= 0:
+                print("❌ Amount must be positive.")
+                return
+            date_val = parse_date(date_s)
         except Exception as e:
             print(f"❌ Invalid input: {e}")
             return
 
-        from core.security import encrypt_data, encrypt_amount
+        # Auto-suggest category if blank but note is given
+        if not category and note:
+            try:
+                category = self.classifier.predict(note)
+                print(f"✨ Suggested category: {category}")
+            except Exception:
+                category = "uncategorized"
+
+        # Duplicate detection (same date, type, amount, category, note)
+        existing = (self.db.query(Transaction)
+                    .filter(Transaction.user_id == self.current_user.id,
+                            Transaction.t_type == t_type,
+                            Transaction.amount == amount,
+                            Transaction.date == date_val,
+                            Transaction.category == category,
+                            Transaction.note == (note or None))
+                    .first())
+        if existing:
+            print("⚠️ Duplicate transaction detected. Skipping save.")
+            return
+
+        # Save
         tx = Transaction(
             user_id=self.current_user.id,
-            t_type=data.t_type,
-            category=data.category,
-            amount=encrypt_amount(data.amount),
-            date=data.date,
-            note=encrypt_data(data.note) if data.note else None
+            t_type=t_type,
+            category=category,
+            amount=amount,
+            date=date_val,
+            note=note or None
         )
         self.db.add(tx)
         self.db.commit()
@@ -108,7 +142,6 @@ class DataCollectorAgent:
         if not self.current_user:
             print("Please login first.")
             return []
-        from core.security import decrypt_data, decrypt_amount
         rows = (self.db.query(Transaction)
                 .filter(Transaction.user_id == self.current_user.id)
                 .order_by(Transaction.date.asc(), Transaction.id.asc())
@@ -117,17 +150,31 @@ class DataCollectorAgent:
             print("No transactions yet.")
         else:
             for r in rows:
-                amount = decrypt_amount(r.amount)
-                note = decrypt_data(r.note) if r.note else ''
-                print(f"[{r.id}] {r.date} | {r.t_type} | {r.category} | {amount:.2f} | {note}")
+                print(f"[{r.id}] {r.date} | {r.t_type} | {r.category} | {r.amount:.2f} | {r.note or ''}")
         return rows
 
     def get_transactions_df(self):
-        import pandas as pd
         rows = self.list_transactions()
-        from core.security import decrypt_data, decrypt_amount
         data = [{
             "id": r.id, "date": r.date, "type": r.t_type,
-            "category": r.category, "amount": decrypt_amount(r.amount), "note": decrypt_data(r.note) if r.note else ''
+            "category": r.category, "amount": r.amount, "note": r.note
         } for r in rows]
         return pd.DataFrame(data)
+
+    # ---------- Export ----------
+    def export_to_csv(self, filename="transactions.csv"):
+        df = self.get_transactions_df()
+        if df.empty:
+            print("No transactions to export.")
+            return
+        df.to_csv(filename, index=False)
+        print(f"✅ Transactions exported to {filename}")
+
+    def export_to_json(self, filename="transactions.json"):
+        df = self.get_transactions_df()
+        if df.empty:
+            print("No transactions to export.")
+            return
+        with open(filename, "w", encoding="utf-8") as f:
+            json.dump(df.to_dict(orient="records"), f, ensure_ascii=False, indent=2)
+        print(f"✅ Transactions exported to {filename}")

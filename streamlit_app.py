@@ -35,7 +35,7 @@ if 'current_user' not in st.session_state:
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
 
-# Custom CSS
+# Custom CSS - Update this section
 st.markdown("""
 <style>
 .main-header {
@@ -57,6 +57,28 @@ st.markdown("""
 .error-message {
     color: #dc3545;
     font-weight: bold;
+}
+.caption-box {
+    background-color: #ffffff;
+    padding: 1.5rem;
+    border-radius: 8px;
+    border-left: 4px solid #1f77b4;
+    margin: 1rem 0;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    color: #333333;
+}
+.caption-box h4 {
+    color: #1f77b4;
+    margin-bottom: 1rem;
+    border-bottom: 2px solid #f0f2f6;
+    padding-bottom: 0.5rem;
+}
+.caption-box p {
+    margin-bottom: 0.8rem;
+    line-height: 1.5;
+}
+.caption-box strong {
+    color: #2c3e50;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -118,6 +140,7 @@ def main():
         delete_my_account_page()
     elif page == "Logout":
         logout()
+
 def delete_my_account_page():
     st.header("Delete My Account & Data")
     st.warning("This will permanently delete your account and all your transactions. This action cannot be undone.")
@@ -134,99 +157,123 @@ def delete_my_account_page():
             st.session_state.current_user = None
             st.session_state.logged_in = False
             st.rerun()
+
 def admin_dashboard_page():
     from core.database import Household, Transaction, User
     data_agent = st.session_state.architect_agent.data_agent
-    st.subheader("Transparency Dashboard / Logs")
-    # Show last 50 transactions as a simple log
-    logs = data_agent.db.query(Transaction).order_by(Transaction.date.desc(), Transaction.id.desc()).limit(50).all()
-    log_data = [(t.id, t.user_id, t.t_type, t.category, t.amount, t.date, t.note) for t in logs]
-    st.write("Recent User Actions & Data Changes:")
-    st.table(log_data)
-    st.write("User Login/Logout/Deletion Events:")
-    event_log = st.session_state.user_event_log[-50:] if 'user_event_log' in st.session_state else []
-    st.table([(e['event'], e['user'], e['timestamp']) for e in event_log])
-    households = data_agent.db.query(Household).all()
+    
+    st.header("Admin Dashboard")
+    
+    # User Management
+    st.subheader("User Management")
     users = data_agent.db.query(User).all()
-    st.subheader("Search Users & Households")
-    search_user = st.text_input("Search user by username")
-    search_household = st.text_input("Search household by name")
-    filtered_users = [u for u in users if search_user.lower() in u.username.lower()] if search_user else users
-    filtered_households = [h for h in households if search_household.lower() in h.name.lower()] if search_household else households
-    st.write("Filtered Users:")
-    st.table([(u.id, u.username, u.role, u.household_id) for u in filtered_users])
-    st.write("Filtered Households:")
-    st.table([(h.id, h.name) for h in filtered_households])
-    st.subheader("All Households")
+    user_data = [(u.id, u.username, u.role, u.household_id) for u in users]
+    st.table(user_data)
+
+    # Delete User Section
+    st.subheader("Delete a User")
+    usernames = [u.username for u in users if u.role != "admin"]
+    if usernames:
+        user_to_delete = st.selectbox("Select user to delete", usernames)
+        if st.button("Delete User"):
+            user_obj = data_agent.db.query(User).filter_by(username=user_to_delete).first()
+            if user_obj:
+                # Delete all transactions for this user
+                data_agent.db.query(Transaction).filter_by(user_id=user_obj.id).delete()
+                data_agent.db.delete(user_obj)
+                data_agent.db.commit()
+                st.success(f"User '{user_to_delete}' and their transactions deleted.")
+                st.rerun()
+    else:
+        st.info("No non-admin users to delete.")
+
+    # Change User Role
+    st.subheader("Change User Role")
+    users_to_change = [u.username for u in users if u.role != "admin"]
+    if users_to_change:
+        user_to_change = st.selectbox("Select user to change role", users_to_change)
+        new_role = st.selectbox("New Role", ["user", "admin"])
+        if st.button("Change Role"):
+            user_obj = data_agent.db.query(User).filter_by(username=user_to_change).first()
+            if user_obj:
+                user_obj.role = new_role
+                data_agent.db.commit()
+                st.success(f"Role for '{user_to_change}' changed to '{new_role}'.")
+                st.rerun()
+    else:
+        st.info("No non-admin users to modify.")
+
+    # Household Management
+    st.subheader("Household Management")
+    households = data_agent.db.query(Household).all()
     household_data = [(h.id, h.name) for h in households]
     st.table(household_data)
 
+    # Delete Household
     st.subheader("Delete a Household")
     household_names = [h.name for h in households]
-    household_to_delete = st.selectbox("Select household to delete", household_names)
-    if st.button("Delete Household"):
-        household_obj = data_agent.db.query(Household).filter_by(name=household_to_delete).first()
-        if household_obj:
-            # Delete all users and transactions in this household
-            users_in_household = data_agent.db.query(User).filter_by(household_id=household_obj.id).all()
-            for user in users_in_household:
-                data_agent.db.query(Transaction).filter_by(user_id=user.id).delete()
-                data_agent.db.delete(user)
-            data_agent.db.delete(household_obj)
-            data_agent.db.commit()
-            st.success(f"Household '{household_to_delete}' and all related users/transactions deleted.")
-            st.rerun()
+    if household_names:
+        household_to_delete = st.selectbox("Select household to delete", household_names)
+        if st.button("Delete Household"):
+            household_obj = data_agent.db.query(Household).filter_by(name=household_to_delete).first()
+            if household_obj:
+                # Delete all users and transactions in this household
+                users_in_household = data_agent.db.query(User).filter_by(household_id=household_obj.id).all()
+                for user in users_in_household:
+                    data_agent.db.query(Transaction).filter_by(user_id=user.id).delete()
+                    data_agent.db.delete(user)
+                data_agent.db.delete(household_obj)
+                data_agent.db.commit()
+                st.success(f"Household '{household_to_delete}' and all related users/transactions deleted.")
+                st.rerun()
+    else:
+        st.info("No households to delete.")
 
+    # Audit and Transparency
+    st.subheader("Transparency Dashboard / Logs")
+    
+    # Show last 50 transactions as a simple log
+    logs = data_agent.db.query(Transaction).order_by(Transaction.date.desc(), Transaction.id.desc()).limit(50).all()
+    if logs:
+        log_data = [(t.id, t.user_id, t.t_type, t.category, t.amount, t.date, t.note) for t in logs]
+        st.write("Recent User Actions & Data Changes:")
+        st.table(log_data)
+    else:
+        st.info("No transaction logs available.")
+    
+    # User events log
+    st.write("User Login/Logout/Deletion Events:")
+    event_log = st.session_state.user_event_log[-50:] if 'user_event_log' in st.session_state else []
+    if event_log:
+        st.table([(e['event'], e['user'], e['timestamp']) for e in event_log])
+    else:
+        st.info("No user events logged.")
+
+    # Search functionality
+    st.subheader("Search Users & Households")
+    search_user = st.text_input("Search user by username")
+    search_household = st.text_input("Search household by name")
+    
+    filtered_users = [u for u in users if search_user.lower() in u.username.lower()] if search_user else users
+    filtered_households = [h for h in households if search_household.lower() in h.name.lower()] if search_household else households
+    
+    st.write("Filtered Users:")
+    st.table([(u.id, u.username, u.role, u.household_id) for u in filtered_users])
+    
+    st.write("Filtered Households:")
+    st.table([(h.id, h.name) for h in filtered_households])
+
+    # Data Export
     st.subheader("Export All Data (CSV)")
     if st.button("Export Users & Transactions"):
-        import pandas as pd
-        users = data_agent.db.query(User).all()
-        transactions = data_agent.db.query(Transaction).all()
         users_df = pd.DataFrame([{"id": u.id, "username": u.username, "role": u.role, "household_id": u.household_id} for u in users])
-        transactions_df = pd.DataFrame([{"id": t.id, "user_id": t.user_id, "type": t.t_type, "category": t.category, "amount": t.amount, "date": t.date, "note": t.note} for t in transactions])
+        transactions_df = pd.DataFrame([{"id": t.id, "user_id": t.user_id, "type": t.t_type, "category": t.category, "amount": t.amount, "date": t.date, "note": t.note} for t in data_agent.db.query(Transaction).all()])
         users_df.to_csv("users_export.csv", index=False)
         transactions_df.to_csv("transactions_export.csv", index=False)
         st.success("Exported users_export.csv and transactions_export.csv to project folder.")
-    st.header("Admin Dashboard")
-    from core.database import User
-    data_agent = st.session_state.architect_agent.data_agent
-    users = data_agent.db.query(User).all()
-    st.subheader("All Users")
-    user_data = [(u.id, u.username, u.role) for u in users]
-    st.table(user_data)
 
-    st.subheader("Delete a User")
-    usernames = [u.username for u in users if u.role != "admin"]
-    user_to_delete = st.selectbox("Select user to delete", usernames)
-    if st.button("Delete User"):
-        user_obj = data_agent.db.query(User).filter_by(username=user_to_delete).first()
-        if user_obj:
-            from core.database import Transaction
-            # Delete all transactions for this user
-            data_agent.db.query(Transaction).filter_by(user_id=user_obj.id).delete()
-            data_agent.db.delete(user_obj)
-            data_agent.db.commit()
-            st.success(f"User '{user_to_delete}' and their transactions deleted.")
-            st.rerun()
-
-    st.subheader("Change User Role")
-    user_to_change = st.selectbox("Select user to change role", [u.username for u in users if u.role != "admin"])
-    new_role = st.selectbox("New Role", ["user", "admin"])
-    if st.button("Change Role"):
-        user_obj = data_agent.db.query(User).filter_by(username=user_to_change).first()
-        if user_obj:
-            user_obj.role = new_role
-            data_agent.db.commit()
-            st.success(f"Role for '{user_to_change}' changed to '{new_role}'.")
-            st.rerun()
-
-    st.subheader("Audit Log (Recent Actions)")
-    # Simple audit log: show last 10 transactions as recent actions
-    recent_transactions = data_agent.db.query(Transaction).order_by(Transaction.date.desc()).limit(10).all()
-    audit_data = [(t.id, t.user_id, t.t_type, t.category, t.amount, t.date, t.note) for t in recent_transactions]
-    st.table(audit_data)
-
-    st.subheader("Privacy & Data Deletion")
+    # System Management
+    st.subheader("System Management")
     if st.button("Delete ALL Data (Irreversible)"):
         # Delete all transactions, users, households
         data_agent.db.query(Transaction).delete()
@@ -235,16 +282,6 @@ def admin_dashboard_page():
         data_agent.db.commit()
         st.success("All data deleted. App is now reset.")
         st.rerun()
-
-    st.subheader("Reset User Password")
-    reset_user = st.selectbox("Select user to reset password", [u.username for u in users if u.role != "admin"])
-    new_password = st.text_input("New Password", type="password")
-    if st.button("Reset Password"):
-        user_obj = data_agent.db.query(User).filter_by(username=reset_user).first()
-        if user_obj:
-            user_obj.password = new_password  # Assumes password field exists
-            data_agent.db.commit()
-            st.success(f"Password for '{reset_user}' has been reset.")
 
 def register_page():
     st.header("🔐 Register New User")
@@ -338,7 +375,7 @@ def login_page():
     with st.form("login_form"):
         username = st.text_input("Username")
         password = st.text_input("Password", type="password")
-        submitted = st.form_submit_button("Login")
+        submitted = st.form_submit_button("Login", width='stretch')
         
         if submitted:
             if username and password:
@@ -378,52 +415,6 @@ def login_page():
                 st.error("Please enter both username and password.")
 
 def dashboard_page():
-    data_agent = st.session_state.architect_agent.data_agent
-    st.subheader("Exportable Reports")
-    df = data_agent.get_transactions_df()
-    if not df.empty:
-        # Summary charts
-        import plotly.express as px
-        st.subheader("Summary Charts")
-        st.markdown("**Pie Chart: Spending by Category**")
-        st.caption("This chart shows how your expenses are distributed across different categories. It helps you identify where most of your money is spent.")
-        st.plotly_chart(px.pie(df, names="category", values="amount", title="Spending by Category"))
-        st.markdown("**Bar Chart: Transactions Over Time**")
-        st.caption("This chart displays your income and expenses over time, allowing you to spot trends and changes in your financial activity.")
-        st.plotly_chart(px.bar(df, x="date", y="amount", color="type", title="Transactions Over Time"))
-        st.write("Download your transactions as:")
-        csv = df.to_csv(index=False).encode('utf-8')
-        st.download_button("Export CSV", csv, "my_transactions.csv", "text/csv")
-        try:
-            import io
-            from reportlab.lib.pagesizes import letter
-            from reportlab.pdfgen import canvas
-            pdf_buffer = io.BytesIO()
-            c = canvas.Canvas(pdf_buffer, pagesize=letter)
-            c.setFillColorRGB(0.12, 0.47, 0.71)
-            c.rect(0, 740, 600, 40, fill=1)
-            c.setFillColorRGB(1, 1, 1)
-            c.setFont("Helvetica-Bold", 18)
-            c.drawString(30, 755, "Household Finance AI Platform")
-            c.setFont("Helvetica", 12)
-            c.drawString(30, 735, "Your trusted partner for smart financial management.")
-            y = 710
-            c.setFillColorRGB(0, 0, 0)
-            c.setFont("Helvetica-Bold", 14)
-            c.drawString(30, y, "Transactions:")
-            y -= 20
-            c.setFont("Helvetica", 10)
-            for i, row in df.iterrows():
-                c.drawString(30, y, str(row.to_dict()))
-                y -= 15
-                if y < 50:
-                    c.showPage()
-                    y = 750
-            c.save()
-            pdf_bytes = pdf_buffer.getvalue()
-            st.download_button("Export PDF", pdf_bytes, "my_transactions.pdf", "application/pdf")
-        except Exception as e:
-            st.warning(f"PDF export failed: {e}")
     if not check_auth():
         return
         
@@ -477,7 +468,32 @@ def dashboard_page():
         # Recent transactions
         st.subheader("Recent Transactions")
         recent_df = df.tail(10).sort_values("date", ascending=False)
-        st.dataframe(recent_df)
+        st.dataframe(recent_df, width='stretch')
+        
+        # Add export section
+        st.subheader("Export Data")
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            csv = df.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                "📥 Export to CSV",
+                csv,
+                "my_transactions.csv",
+                "text/csv",
+                key='download-csv'
+            )
+        
+        with col2:
+            # JSON export
+            json_str = df.to_json(orient='records', indent=2)
+            st.download_button(
+                "📥 Export to JSON",
+                json_str,
+                "my_transactions.json",
+                "application/json",
+                key='download-json'
+            )
     else:
         st.info("No transactions found. Start by adding some transactions!")
         if st.button("Add Your First Transaction"):
@@ -485,70 +501,113 @@ def dashboard_page():
             st.rerun()
 
 def add_transaction_page():
+    if not check_auth():
+        return
+
+    st.header("➕ Add Transaction")
+
+    # Ensure classifier is available
+    if 'classifier' not in st.session_state:
+        try:
+            from models.category_classifier import CategoryClassifier
+            st.session_state.classifier = CategoryClassifier()
+        except Exception as e:
+            st.warning(f"Classifier not loaded: {e}")
+
+    # Ensure anomaly detector is available
+    if 'anomaly_detector' not in st.session_state:
+        try:
+            from models.anomaly_detector import AnomalyDetector
+            st.session_state.anomaly_detector = AnomalyDetector()
+        except Exception as e:
+            st.warning(f"Anomaly detector not loaded: {e}")
+
     with st.form("transaction_form"):
         col1, col2 = st.columns(2)
         with col1:
             t_type = st.selectbox("Transaction Type", ["income", "expense"])
-            category = st.text_input("Category", placeholder="e.g., food, bills, salary")
+
+            # Note input
+            note_input = st.text_area("Note (optional)", placeholder="Additional details...")
+
+            # Auto-suggest category
+            predicted_category = None
+            if note_input.strip() and 'classifier' in st.session_state:
+                try:
+                    predicted_category = st.session_state.classifier.predict(note_input)
+                except Exception as e:
+                    st.warning(f"Auto-suggestion failed: {e}")
+
+            category_input = st.text_input(
+                "Category",
+                value=predicted_category if predicted_category else "",
+                placeholder="e.g., food, bills, salary"
+            )
+
             amount = st.number_input("Amount", min_value=0.01, format="%.2f")
+
         with col2:
             date_input = st.date_input("Date", value=date.today())
-            note = st.text_area("Note (optional)", placeholder="Additional details...")
+
         submitted = st.form_submit_button("Add Transaction", width='stretch')
+
     if submitted:
-        # Input sanitization
-        sanitized_category = category.strip()
-        if not sanitized_category or not sanitized_category.replace(' ', '').isalnum():
-            st.error("Category must be non-empty and contain only letters, numbers, and spaces.")
+        # Use predicted category if user left it empty
+        final_category = category_input.strip() if category_input.strip() else predicted_category
+        if not final_category:
+            st.error("❌ Category cannot be empty. Please enter or select a category.")
             return
-        sanitized_note = note.strip() if note else None
-        if sanitized_note and len(sanitized_note) > 200:
-            st.error("Note is too long (max 200 characters).")
-            return
-        try:
-            data_agent = st.session_state.architect_agent.data_agent
-            from core.schemas import TransactionIn
-            from core.database import Transaction
-            from core.utils import parse_date
-            transaction_data = TransactionIn(
-                t_type=t_type,
-                category=sanitized_category,
-                amount=float(amount),
-                date=date_input,
-                note=sanitized_note if sanitized_note else None
-            )
-            tx = Transaction(
-                user_id=data_agent.current_user.id,
-                t_type=transaction_data.t_type,
-                category=transaction_data.category,
-                amount=transaction_data.amount,
-                date=transaction_data.date,
-                note=transaction_data.note
-            )
-            data_agent.db.add(tx)
-            data_agent.db.commit()
-            # Log transaction event
-            if 'user_event_log' not in st.session_state:
-                st.session_state.user_event_log = []
-            st.session_state.user_event_log.append({
-                "event": "add_transaction",
-                "user": st.session_state.current_user,
-                "timestamp": datetime.now().isoformat()
-            })
-            st.success("✅ Transaction added successfully!")
-            st.balloons()
-            st.info(f"Added: {t_type.title()} - {sanitized_category} - ${amount:.2f} on {date_input}")
-        except Exception as e:
-            st.error(f"❌ Failed to add transaction: {str(e)}")
+
+        if amount > 0:
             try:
-                data_agent.db.rollback()
-            except Exception:
-                pass
+                data_agent = st.session_state.architect_agent.data_agent
+                from core.schemas import TransactionIn
+                from core.database import Transaction
+
+                transaction_data = TransactionIn(
+                    t_type=t_type,
+                    category=final_category,
+                    amount=float(amount),
+                    date=date_input,
+                    note=note_input if note_input.strip() else None
+                )
+
+                # Save transaction
+                tx = Transaction(
+                    user_id=data_agent.current_user.id,
+                    t_type=transaction_data.t_type,
+                    category=transaction_data.category,
+                    amount=transaction_data.amount,
+                    date=transaction_data.date,
+                    note=transaction_data.note
+                )
+
+                data_agent.db.add(tx)
+                data_agent.db.commit()
+                st.success("✅ Transaction added successfully!")
+                st.balloons()
+                st.info(f"Added: {t_type.title()} - {final_category} - ${amount:.2f} on {date_input}")
+
+                # --- Anomaly Detection ---
+                if t_type == "expense" and 'anomaly_detector' in st.session_state:
+                    df = data_agent.get_transactions_df()
+                    anomalies = st.session_state.anomaly_detector.detect(df)
+                    if not anomalies.empty and tx.id in anomalies.index:
+                        st.warning("⚠️ This expense looks unusual compared to your past expenses!")
+
+            except Exception as e:
+                st.error(f"❌ Failed to add transaction: {str(e)}")
+                try:
+                    data_agent.db.rollback()
+                except Exception:
+                    pass
+        else:
+            st.error("Please enter a valid amount.")
 
 def view_transactions_page():
     if not check_auth():
         return
-        
+
     st.header("📝 View Transactions")
     
     data_agent = st.session_state.architect_agent.data_agent
@@ -557,7 +616,6 @@ def view_transactions_page():
     if df is not None and not df.empty:
         # Filters
         col1, col2, col3 = st.columns(3)
-        
         with col1:
             type_filter = st.selectbox("Filter by Type", ["All", "income", "expense"])
         with col2:
@@ -565,37 +623,39 @@ def view_transactions_page():
             category_filter = st.selectbox("Filter by Category", categories)
         with col3:
             sort_by = st.selectbox("Sort by", ["date", "amount", "category"])
-        
+
         # Apply filters
         filtered_df = df.copy()
         if type_filter != "All":
             filtered_df = filtered_df[filtered_df["type"] == type_filter]
         if category_filter != "All":
             filtered_df = filtered_df[filtered_df["category"] == category_filter]
-        
         filtered_df = filtered_df.sort_values(sort_by, ascending=False)
-        
-        # Display results
-        st.subheader(f"Transactions ({len(filtered_df)} found)")
-        
-        # Summary of filtered data
+
+        # --- Mini Metrics ---
         if not filtered_df.empty:
             total_amount = filtered_df["amount"].sum()
             avg_amount = filtered_df["amount"].mean()
-            
-            col1, col2 = st.columns(2)
+            top_categories = (filtered_df[filtered_df["type"]=="expense"]
+                              .groupby("category")["amount"]
+                              .sum()
+                              .sort_values(ascending=False)
+                              .head(3))
+            col1, col2, col3, col4 = st.columns(4)
             with col1:
                 st.metric("Total Amount", f"${total_amount:,.2f}")
             with col2:
                 st.metric("Average Amount", f"${avg_amount:,.2f}")
+            with col3:
+                st.metric("Top Category", f"{top_categories.index[0]} (${top_categories.iloc[0]:,.2f})" if not top_categories.empty else "-")
+            with col4:
+                st.metric("2nd Top Category", f"{top_categories.index[1]} (${top_categories.iloc[1]:,.2f})" if len(top_categories) > 1 else "-")
+
+        # Display transactions
+        display_df = filtered_df.copy()
+        display_df["amount"] = display_df["amount"].apply(lambda x: f"${x:,.2f}")
+        st.dataframe(display_df, width='stretch')
         
-        # Transaction table with better formatting
-        if not filtered_df.empty:
-            display_df = filtered_df.copy()
-            display_df["amount"] = display_df["amount"].apply(lambda x: f"${x:,.2f}")
-            st.dataframe(display_df)
-        else:
-            st.info("No transactions match your filters.")
     else:
         st.info("No transactions found. Add some transactions first!")
 
@@ -729,29 +789,6 @@ def charts_page():
     else:
         st.info("No data available for charts. Add some transactions first!")
 
-# Add these helper functions at the bottom of your streamlit_app.py
-def _display_caption(caption):
-    """Display chart caption in a formatted box"""
-    if isinstance(caption, dict) and 'summary' in caption:
-        st.markdown(f"""
-        <div class="caption-box">
-            <h4>📋 Chart Explanation</h4>
-            <p><strong>What's being compared:</strong> {caption.get('comparison', 'N/A')}</p>
-            <p><strong>Chart type reasoning:</strong> {caption.get('reasoning', 'N/A')}</p>
-            <p><strong>Key insight:</strong> {caption.get('insights', 'N/A')}</p>
-        </div>
-        """, unsafe_allow_html=True)
-
-def _get_time_range_param(time_range):
-    """Convert time range selection to parameter"""
-    range_map = {
-        "Last 3 Months": "last_3_months",
-        "Last 6 Months": "last_6_months", 
-        "This Year": "this_year",
-        "All": None
-    }
-    return range_map.get(time_range, None)
-    
 def insights_page():
     if not check_auth():
         return
@@ -805,7 +842,7 @@ def logout():
     st.session_state.user_event_log.append({
         "event": "logout",
         "user": st.session_state.current_user,
-        "timestamp": datetime.now().isoformat()  # This should work with 'from datetime import datetime'
+        "timestamp": datetime.now().isoformat()
     })
     st.session_state.logged_in = False
     st.session_state.current_user = None
@@ -818,6 +855,37 @@ def check_auth():
         st.warning("Please log in to access this page.")
         return False
     return True
+
+# Helper functions
+def _display_caption(caption):
+    """Display chart caption in a formatted box with dark text"""
+    if isinstance(caption, dict) and 'summary' in caption:
+        st.markdown(f"""
+        <div class="caption-box">
+            <h4>📋 Chart Explanation</h4>
+            <p><strong>What's being compared:</strong> {caption.get('comparison', 'N/A')}</p>
+            <p><strong>Chart type reasoning:</strong> {caption.get('reasoning', 'N/A')}</p>
+            <p><strong>Key insight:</strong> {caption.get('insights', 'N/A')}</p>
+        </div>
+        """, unsafe_allow_html=True)
+    elif isinstance(caption, dict):
+        # Handle cases where the structure might be different
+        st.markdown(f"""
+        <div class="caption-box">
+            <h4>📋 Chart Explanation</h4>
+            <p><strong>Summary:</strong> {caption.get('summary', 'No description available')}</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+def _get_time_range_param(time_range):
+    """Convert time range selection to parameter"""
+    range_map = {
+        "Last 3 Months": "last_3_months",
+        "Last 6 Months": "last_6_months", 
+        "This Year": "this_year",
+        "All": None
+    }
+    return range_map.get(time_range, None)
 
 if __name__ == "__main__":
     main()

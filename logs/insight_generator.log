@@ -81,3 +81,7 @@
 2025-09-25 22:22:17,982 - INFO - {'id': 24, 'date': datetime.date(2025, 9, 27), 'type': 'expense', 'category': 'education', 'amount': 1000.0, 'note': 'research printouts'}
 2025-09-25 22:22:17,982 - INFO - {'id': 18, 'date': datetime.date(2025, 9, 25), 'type': 'expense', 'category': 'food', 'amount': 5000.0, 'note': 'taco bell - classic burrito'}
 2025-09-25 22:22:17,983 - INFO - {'id': 2, 'date': datetime.date(2025, 9, 1), 'type': 'income', 'category': 'salary', 'amount': 50000.0, 'note': 'bonus added'}
+2025-09-26 00:05:17,286 - INFO - Transparency sample logged:
+2025-09-26 00:05:17,287 - INFO - {'id': 3, 'date': datetime.date(2025, 9, 1), 'type': 'expense', 'category': 'educational', 'amount': 2200.0, 'note': 'official chess tshirt 2025/26'}
+2025-09-26 00:05:17,287 - INFO - {'id': 18, 'date': datetime.date(2025, 9, 25), 'type': 'expense', 'category': 'food', 'amount': 5000.0, 'note': 'taco bell - classic burrito'}
+2025-09-26 00:05:17,288 - INFO - {'id': 2, 'date': datetime.date(2025, 9, 1), 'type': 'income', 'category': 'salary', 'amount': 50000.0, 'note': 'bonus added'}
