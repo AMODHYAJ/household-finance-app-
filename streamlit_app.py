@@ -603,82 +603,155 @@ def charts_page():
     if not check_auth():
         return
         
-    st.header("📈 Charts & Visualizations")
+    st.header("📈 Advanced Charts & Visualizations")
     
     data_agent = st.session_state.architect_agent.data_agent
     chart_agent = st.session_state.architect_agent.chart_agent
     df = data_agent.get_transactions_df()
     
     if df is not None and not df.empty:
-        # Chart options
-        chart_type = st.selectbox("Select Chart Type", [
-            "Expenses by Category (Pie)",
-            "Income vs Expense (Bar)",
-            "Monthly Expense Trend (Line)",
-            "All Charts"
+        # Tab layout for different chart types
+        tab1, tab2, tab3, tab4, tab5 = st.tabs([
+            "📊 Basic Charts", 
+            "🎯 Interactive Dashboard", 
+            "🔍 Comparative Analysis",
+            "🤖 Natural Language Query",
+            "🔮 Predictive Charts"
         ])
         
-        col1, col2 = st.columns(2)
-        with col1:
-            show_chart = st.button("Generate Chart", type="primary")
-        with col2:
-            save_chart = st.button("Save Charts as PNG")
-        
-        if show_chart or save_chart:
-            if chart_type == "Expenses by Category (Pie)" or chart_type == "All Charts":
-                expenses_df = df[df["type"] == "expense"]
-                if not expenses_df.empty:
-                    category_totals = expenses_df.groupby("category")["amount"].sum()
-                    fig = px.pie(values=category_totals.values, names=category_totals.index,
-                               title="Expenses by Category")
-                    st.markdown("**Pie Chart: Expenses by Category**")
-                    st.caption("This chart shows how your expenses are distributed across categories, helping you identify major spending areas.")
-                    st.plotly_chart(fig, config={"responsive": True})
+        with tab1:
+            st.subheader("Basic Financial Charts")
             
-            if chart_type == "Income vs Expense (Bar)" or chart_type == "All Charts":
-                income = df[df["type"] == "income"]["amount"].sum()
-                expense = df[df["type"] == "expense"]["amount"].sum()
-                fig = go.Figure(data=[
-                    go.Bar(x=['Income', 'Expenses'], y=[income, expense],
-                          marker_color=['green', 'red'])
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                time_range = st.selectbox("Time Range", 
+                                         ["All", "Last 3 Months", "Last 6 Months", "This Year"],
+                                         key="basic_time_range")
+            
+            with col2:
+                chart_type = st.selectbox("Select Chart Type", [
+                    "Expenses by Category",
+                    "Income vs Expenses", 
+                    "Savings Over Time",
+                    "All Basic Charts"
                 ])
-                fig.update_layout(title="Income vs Expenses")
-                st.markdown("**Bar Chart: Income vs Expenses**")
-                st.caption("This chart compares your total income and expenses, making it easy to see your overall financial balance.")
-                st.plotly_chart(fig, config={"responsive": True})
             
-            if chart_type == "Monthly Expense Trend (Line)" or chart_type == "All Charts":
-                expenses_df = df[df["type"] == "expense"].copy()
-                if not expenses_df.empty:
-                    expenses_df["date"] = pd.to_datetime(expenses_df["date"])
-                    expenses_df["month"] = expenses_df["date"].dt.to_period("M").astype(str)
-                    monthly_expenses = expenses_df.groupby("month")["amount"].sum().sort_index()
-                    fig = px.line(x=monthly_expenses.index, y=monthly_expenses.values,
-                                title="Monthly Expense Trend")
-                    fig.update_xaxes(title="Month")
-                    fig.update_yaxes(title="Amount ($)")
-                    st.markdown("**Line Chart: Monthly Expense Trend**")
-                    st.caption("This chart shows how your expenses change month by month, helping you spot trends and plan ahead.")
-                    st.plotly_chart(fig, config={"responsive": True})
+            if st.button("Generate Basic Charts", type="primary"):
+                time_range_param = _get_time_range_param(time_range)
+                
+                with st.spinner("Generating charts..."):
+                    if chart_type in ["Expenses by Category", "All Basic Charts"]:
+                        st.subheader("Expenses by Category")
+                        fig, caption = chart_agent.pie_expenses_by_category(save=False, show=False, time_range=time_range_param)
+                        st.plotly_chart(fig, use_container_width=True)
+                        _display_caption(caption)
+                    
+                    if chart_type in ["Income vs Expenses", "All Basic Charts"]:
+                        st.subheader("Income vs Expenses")
+                        fig, caption = chart_agent.bar_income_vs_expense(time_range=time_range_param)
+                        st.plotly_chart(fig, use_container_width=True)
+                        _display_caption(caption)
+                    
+                    if chart_type in ["Savings Over Time", "All Basic Charts"]:
+                        st.subheader("Savings Over Time")
+                        fig, caption = chart_agent.line_savings_over_time(time_range=time_range_param)
+                        st.plotly_chart(fig, use_container_width=True)
+                        _display_caption(caption)
         
-        if save_chart:
-            try:
-                # Generate and save static charts using your chart agent
-                chart_agent.pie_expenses_by_category(save=True, show=False)
-                chart_agent.bar_income_vs_expense(save=True, show=False)
-                chart_agent.line_monthly_expense_trend(save=True, show=False)
-                st.success("📊 Charts saved to visualizations/static_charts/")
-            except Exception as e:
-                st.error(f"Failed to save charts: {str(e)}")
+        with tab2:
+            st.subheader("Interactive Dashboard")
+            
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                categories = st.multiselect("Filter Categories", 
+                                          options=df['category'].unique() if 'category' in df.columns else [])
+            with col2:
+                transaction_types = st.multiselect("Filter Types", 
+                                                 options=['income', 'expense'])
+            with col3:
+                date_range = st.date_input("Date Range", 
+                                         value=[df['date'].min(), df['date'].max()] if 'date' in df.columns else [])
+            
+            if st.button("Generate Dashboard"):
+                filters = {
+                    'category': categories,
+                    'type': transaction_types,
+                    'date_range': date_range if len(date_range) == 2 else None
+                }
+                
+                fig = chart_agent.create_interactive_dashboard(filters)
+                st.plotly_chart(fig, use_container_width=True)
+        
+        with tab3:
+            st.subheader("Comparative Analysis")
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                period1 = st.selectbox("First Period", 
+                                      ["This Month", "Last Month", "This Year", "Last Year"],
+                                      key="period1")
+            with col2:
+                period2 = st.selectbox("Second Period", 
+                                      ["Last Month", "This Month", "Last Year", "This Year"],
+                                      key="period2")
+            
+            if st.button("Compare Periods"):
+                fig = chart_agent.comparative_charts(period1, period2)
+                st.plotly_chart(fig, use_container_width=True)
+        
+        with tab4:
+            st.subheader("Natural Language Query")
+            
+            query = st.text_input("Ask for a chart", 
+                                 placeholder="e.g., 'Show me electricity expenses for the last 3 months'")
+            
+            if st.button("Generate Chart from Query") and query:
+                result = chart_agent.natural_language_to_chart(query)
+                if isinstance(result, tuple):
+                    st.plotly_chart(result[0], use_container_width=True)
+                    if len(result) > 1 and isinstance(result[1], dict):
+                        _display_caption(result[1])
+                else:
+                    st.plotly_chart(result, use_container_width=True)
+        
+        with tab5:
+            st.subheader("Predictive Financial Charts")
+            
+            periods = st.slider("Months to Predict", 1, 12, 6)
+            
+            if st.button("Generate Predictions"):
+                fig = chart_agent.predictive_charts(periods)
+                st.plotly_chart(fig, use_container_width=True)
                 
     else:
         st.info("No data available for charts. Add some transactions first!")
 
+# Add these helper functions at the bottom of your streamlit_app.py
+def _display_caption(caption):
+    """Display chart caption in a formatted box"""
+    if isinstance(caption, dict) and 'summary' in caption:
+        st.markdown(f"""
+        <div class="caption-box">
+            <h4>📋 Chart Explanation</h4>
+            <p><strong>What's being compared:</strong> {caption.get('comparison', 'N/A')}</p>
+            <p><strong>Chart type reasoning:</strong> {caption.get('reasoning', 'N/A')}</p>
+            <p><strong>Key insight:</strong> {caption.get('insights', 'N/A')}</p>
+        </div>
+        """, unsafe_allow_html=True)
 
-    if not check_auth():
-        return
-
-   
+def _get_time_range_param(time_range):
+    """Convert time range selection to parameter"""
+    range_map = {
+        "Last 3 Months": "last_3_months",
+        "Last 6 Months": "last_6_months", 
+        "This Year": "this_year",
+        "All": None
+    }
+    return range_map.get(time_range, None)
+    
 def insights_page():
     if not check_auth():
         return
