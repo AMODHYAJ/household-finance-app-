@@ -16,6 +16,7 @@ class User(Base):
     id = Column(Integer, primary_key=True)
     username = Column(String, unique=True, nullable=False)
     password_hash = Column(String, nullable=False)
+    role = Column(String, nullable=False, default="user")  # 'admin' or 'user'
     household_id = Column(Integer, ForeignKey("households.id"), nullable=True)
     household = relationship("Household", back_populates="users")
     transactions = relationship("Transaction", back_populates="user")

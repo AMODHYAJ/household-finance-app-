@@ -1,3 +1,13 @@
 venv/
 __pycache__/
 *.pyc
+# Environment variables
+.env
+# Data files
+data/*.csv
+data/*.db
+# Model files
+models/*.pkl
+# OS-specific files
+.DS_Store
+Thumbs.db

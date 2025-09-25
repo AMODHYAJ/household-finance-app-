@@ -21,6 +21,9 @@ class ChartCreatorAgent:
         plt.figure()
         plt.pie(totals.values, labels=totals.index, autopct="%1.1f%%")
         plt.title("Expenses by Category")
+        # Explainability caption
+        caption = f"This pie chart shows the proportion of expenses by category. The largest category is '{totals.idxmax()}' with ${totals.max():.2f}."
+        print("[Explainability]", caption)
         path = os.path.join(CHART_DIR, "expenses_by_category.png")
         if save: plt.savefig(path, bbox_inches="tight")
         if show: plt.show()
@@ -37,6 +40,12 @@ class ChartCreatorAgent:
         plt.figure()
         plt.bar(["Income", "Expense"], [income, expense])
         plt.title("Income vs Expense")
+        # Explainability caption
+        if income > expense:
+            caption = f"Bar chart comparing total income (${income:.2f}) and expenses (${expense:.2f}). You saved ${income-expense:.2f} overall."
+        else:
+            caption = f"Bar chart comparing total income (${income:.2f}) and expenses (${expense:.2f}). You spent ${expense-income:.2f} more than you earned."
+        print("[Explainability]", caption)
         path = os.path.join(CHART_DIR, "income_vs_expense.png")
         if save: plt.savefig(path, bbox_inches="tight")
         if show: plt.show()
@@ -61,6 +70,13 @@ class ChartCreatorAgent:
         plt.title("Monthly Expense Trend")
         plt.xlabel("Month")
         plt.ylabel("Amount")
+        # Explainability caption
+        if len(series) > 1:
+            trend = "increased" if series.iloc[-1] > series.iloc[0] else "decreased"
+            caption = f"Line chart showing monthly expense trend. Expenses have {trend} from ${series.iloc[0]:.2f} in {series.index[0]} to ${series.iloc[-1]:.2f} in {series.index[-1]}."
+        else:
+            caption = "Line chart showing monthly expense trend. Not enough data to determine trend."
+        print("[Explainability]", caption)
         path = os.path.join(CHART_DIR, "monthly_expense_trend.png")
         if save: plt.savefig(path, bbox_inches="tight")
         if show: plt.show()

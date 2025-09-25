@@ -15,6 +15,9 @@ class DataCollectorAgent:
     def register_user(self):
         username = input("Choose username: ").strip()
         password = input("Choose password: ").strip()
+        role = input("Role (admin/user): ").strip().lower()
+        if role not in ["admin", "user"]:
+            role = "user"
         hh_choice = input("Create new household? (y/n): ").strip().lower()
         household = None
         if hh_choice == "y":
@@ -35,14 +38,25 @@ class DataCollectorAgent:
                 household = self.db.query(Household).get(hh_id) if hh_id else None
 
         user = User(username=username, password_hash=hash_password(password),
-                    household=household)
+                    household=household, role=role)
         self.db.add(user)
         try:
             self.db.commit()
-            print("✅ Registered successfully.")
+            print(f"✅ Registered successfully as {role}.")
         except IntegrityError:
             self.db.rollback()
             print("❌ Username already exists.")
+    def delete_user_data(self):
+        if not self.current_user or self.current_user.role != "admin":
+            print("❌ Only admin users can delete data.")
+            return
+        confirm = input("Are you sure you want to delete all user data? (y/n): ").strip().lower()
+        if confirm == "y":
+            num_deleted = self.db.query(User).delete()
+            self.db.commit()
+            print(f"✅ Deleted {num_deleted} users and all related data.")
+        else:
+            print("Cancelled data deletion.")
 
     def login_user(self) -> bool:
         username = input("Username: ").strip()
@@ -77,13 +91,14 @@ class DataCollectorAgent:
             print(f"❌ Invalid input: {e}")
             return
 
+        from core.security import encrypt_data, encrypt_amount
         tx = Transaction(
             user_id=self.current_user.id,
             t_type=data.t_type,
             category=data.category,
-            amount=data.amount,
+            amount=encrypt_amount(data.amount),
             date=data.date,
-            note=data.note
+            note=encrypt_data(data.note) if data.note else None
         )
         self.db.add(tx)
         self.db.commit()
@@ -93,6 +108,7 @@ class DataCollectorAgent:
         if not self.current_user:
             print("Please login first.")
             return []
+        from core.security import decrypt_data, decrypt_amount
         rows = (self.db.query(Transaction)
                 .filter(Transaction.user_id == self.current_user.id)
                 .order_by(Transaction.date.asc(), Transaction.id.asc())
@@ -101,14 +117,17 @@ class DataCollectorAgent:
             print("No transactions yet.")
         else:
             for r in rows:
-                print(f"[{r.id}] {r.date} | {r.t_type} | {r.category} | {r.amount:.2f} | {r.note or ''}")
+                amount = decrypt_amount(r.amount)
+                note = decrypt_data(r.note) if r.note else ''
+                print(f"[{r.id}] {r.date} | {r.t_type} | {r.category} | {amount:.2f} | {note}")
         return rows
 
     def get_transactions_df(self):
         import pandas as pd
         rows = self.list_transactions()
+        from core.security import decrypt_data, decrypt_amount
         data = [{
             "id": r.id, "date": r.date, "type": r.t_type,
-            "category": r.category, "amount": r.amount, "note": r.note
+            "category": r.category, "amount": decrypt_amount(r.amount), "note": decrypt_data(r.note) if r.note else ''
         } for r in rows]
         return pd.DataFrame(data)
