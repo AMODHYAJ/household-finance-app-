@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 import pickle
-from sklearn.linear_model import LinearRegression
+from sklearn.ensemble import RandomForestRegressor
 
 class ExpensePredictor:
     def __init__(self, model_path="models/expense_predictor.pkl"):
@@ -17,7 +17,11 @@ class ExpensePredictor:
 
         X = monthly[["year", "month"]]
         y = monthly["amount"]
-        self.model = LinearRegression().fit(X, y)
+
+        self.model = RandomForestRegressor(
+            n_estimators=200,
+            random_state=42
+        ).fit(X, y)
 
         with open(self.model_path, "wb") as f:
             pickle.dump(self.model, f)
