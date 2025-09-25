@@ -274,30 +274,70 @@ def dashboard_page():
             st.rerun()
 
 def add_transaction_page():
+    if not check_auth():
+        return
+
+    st.header("➕ Add Transaction")
+
+    # Ensure classifier is available in session
+    if 'classifier' not in st.session_state:
+        try:
+            from agents.data_collector import CategoryClassifier
+            st.session_state.classifier = CategoryClassifier()
+        except Exception as e:
+            st.warning(f"Classifier not loaded: {e}")
+
     with st.form("transaction_form"):
         col1, col2 = st.columns(2)
         with col1:
             t_type = st.selectbox("Transaction Type", ["income", "expense"])
-            category = st.text_input("Category", placeholder="e.g., food, bills, salary")
+
+            # Note input
+            note_input = st.text_area("Note (optional)", placeholder="Additional details...")
+
+            # Auto-suggest category
+            predicted_category = None
+            if note_input.strip() and 'classifier' in st.session_state:
+                try:
+                    predicted_category = st.session_state.classifier.predict(note_input)
+                except Exception as e:
+                    st.warning(f"Auto-suggestion failed: {e}")
+
+            category_input = st.text_input(
+                "Category",
+                value=predicted_category if predicted_category else "",
+                placeholder="e.g., food, bills, salary"
+            )
+
             amount = st.number_input("Amount", min_value=0.01, format="%.2f")
+
         with col2:
             date_input = st.date_input("Date", value=date.today())
-            note = st.text_area("Note (optional)", placeholder="Additional details...")
+
         submitted = st.form_submit_button("Add Transaction", width='stretch')
+
     if submitted:
-        if category and amount > 0:
+        # Use predicted category if user left it empty
+        final_category = category_input.strip() if category_input.strip() else predicted_category
+        if not final_category:
+            st.error("❌ Category cannot be empty. Please enter or select a category.")
+            return
+
+        if amount > 0:
             try:
                 data_agent = st.session_state.architect_agent.data_agent
                 from core.schemas import TransactionIn
                 from core.database import Transaction
                 from core.utils import parse_date
+
                 transaction_data = TransactionIn(
                     t_type=t_type,
-                    category=category,
+                    category=final_category,
                     amount=float(amount),
                     date=date_input,
-                    note=note if note.strip() else None
+                    note=note_input if note_input.strip() else None
                 )
+
                 tx = Transaction(
                     user_id=data_agent.current_user.id,
                     t_type=transaction_data.t_type,
@@ -306,11 +346,13 @@ def add_transaction_page():
                     date=transaction_data.date,
                     note=transaction_data.note
                 )
+
                 data_agent.db.add(tx)
                 data_agent.db.commit()
                 st.success("✅ Transaction added successfully!")
                 st.balloons()
-                st.info(f"Added: {t_type.title()} - {category} - ${amount:.2f} on {date_input}")
+                st.info(f"Added: {t_type.title()} - {final_category} - ${amount:.2f} on {date_input}")
+
             except Exception as e:
                 st.error(f"❌ Failed to add transaction: {str(e)}")
                 try:
@@ -318,7 +360,9 @@ def add_transaction_page():
                 except Exception:
                     pass
         else:
-            st.error("Please fill in all required fields.")
+            st.error("Please enter a valid amount.")
+
+
 
 def view_transactions_page():
     if not check_auth():
