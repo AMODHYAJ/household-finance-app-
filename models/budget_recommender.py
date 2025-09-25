@@ -48,7 +48,8 @@ class BudgetRecommender:
 
         expenses["date"] = pd.to_datetime(expenses["date"])
         last_month = expenses["date"].dt.to_period("M").max()
-        pivot = expenses[expenses["date"].dt.to_period("M") == last_month]
+        pivot = expenses[expenses["date"].dt.to_period("M") == last_month].copy()
+        pivot["month"] = pivot["date"].dt.to_period("M")
         pivot = pivot.pivot_table(
             index="month",
             columns="category",
@@ -56,6 +57,7 @@ class BudgetRecommender:
             aggfunc="sum",
             fill_value=0
         )
+
 
         X_scaled = self.scaler.transform(pivot)
         cluster = self.model.predict(X_scaled)[0]
