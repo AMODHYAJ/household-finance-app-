@@ -1,122 +1,142 @@
 import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
 import os
+import logging
+from datetime import datetime
+
 from models.expense_predictor import ExpensePredictor
 from models.anomaly_detector import AnomalyDetector
-from models.category_classifier import CategoryClassifier
 from models.budget_recommender import BudgetRecommender
 
-def mask_sensitive_text(text, max_length=10):
-    """Mask sensitive financial notes for privacy."""
-    return (text[:max_length] + "...") if len(text) > max_length else text
+# ---------------- Logging ---------------- #
+logging.basicConfig(
+    filename="logs/insight_generator.log",
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s"
+)
 
-class InsightGeneratorAgent:
-    def __init__(self, data_agent=None, model_dir="models/"):
-        self.data_agent = data_agent
-        self.model_dir = model_dir
-        os.makedirs(model_dir, exist_ok=True)
+DATA_PATH = "data/finance_test.csv"
+MODEL_DIR = "models/"
+INSIGHTS_DIR = "insights/"
 
-        # Load models
-        self.expense_predictor = ExpensePredictor(model_path=os.path.join(model_dir, "expense_predictor.pkl"))
-        self.anomaly_detector = AnomalyDetector(model_path=os.path.join(model_dir, "anomaly_detector.pkl"))
-        self.category_classifier = CategoryClassifier(model_path=os.path.join(model_dir, "category_classifier.pkl"))
-        self.budget_recommender = BudgetRecommender(model_path=os.path.join(model_dir, "budget_recommender.pkl"))
+os.makedirs(INSIGHTS_DIR, exist_ok=True)
+os.makedirs("logs", exist_ok=True)
 
-    def summarize(self, df):
-        if df is None or df.empty:
-            return "No transactions yet."
-        total_income = df[df["type"] == "income"]["amount"].sum()
-        total_expense = df[df["type"] == "expense"]["amount"].sum()
-        return {
-            "Total Income": round(total_income, 2),
-            "Total Expense": round(total_expense, 2),
-            "Savings": round(total_income - total_expense, 2)
-        }
 
-    def safe_summary(self, df):
-        """Return summaries without exposing raw transaction details."""
-        summary = self.summarize(df)
-        summary["Privacy Note"] = "Only totals shown. Individual transactions remain private."
-        return summary
+class InsightGenerator:
+    def __init__(self):
+        self.df = pd.read_csv(DATA_PATH)
+        self.exp_pred = ExpensePredictor(os.path.join(MODEL_DIR, "expense_predictor.pkl"))
+        self.anomaly_det = AnomalyDetector(os.path.join(MODEL_DIR, "anomaly_detector.pkl"))
+        self.budget_rec = BudgetRecommender(os.path.join(MODEL_DIR, "budget_recommender.pkl"))
 
-    def generate_insights(self, df):
-        if df is None or df.empty:
-            return ["No data available."]
+    # ---------------- Responsible AI ---------------- #
+    def responsible_ai_checks(self):
+        issues = []
 
-        insights = []
+        # Fairness Check → ensure no expense category is unfairly neglected
+        if "category" in self.df.columns:
+            category_counts = self.df["category"].value_counts(normalize=True)
+            if category_counts.min() < 0.05:
+                issues.append("⚠️ Some categories underrepresented (<5%) → possible bias in models.")
 
-        # Income vs Expense check
-        income = df[df["type"] == "income"]["amount"].sum()
-        expense = df[df["type"] == "expense"]["amount"].sum()
-        insights.append("⚠ You spent more than you earned." if expense > income else "✅ You saved money overall.")
+        # Transparency → log model predictions
+        logging.info("Generating transparency samples for predictions...")
+        sample = self.df.sample(min(5, len(self.df)))
+        preds = self.exp_pred.predict(sample)
+        for i, val in enumerate(preds):
+            logging.info(f"Transparency: Input={sample.iloc[i].to_dict()}, Prediction={val}")
 
-        # Expense prediction
-        try:
-            last_date = pd.to_datetime(df["date"]).max()
-            next_month = (last_date.month % 12) + 1
-            next_year = last_date.year + (1 if last_date.month == 12 else 0)
-            pred = self.expense_predictor.predict_next_month(next_month, next_year)
-            insights.append(f"📅 Predicted expenses for {next_month}/{next_year}: ${pred:.2f}")
-            insights.append("ℹ️ Transparency: Prediction based on past monthly spending trends (RandomForest).")
-        except Exception:
-            insights.append("⚠ Prediction unavailable.")
+        # Privacy → check for sensitive columns
+        sensitive_cols = [col for col in self.df.columns if "name" in col.lower() or "account" in col.lower()]
+        if sensitive_cols:
+            issues.append(f"⚠️ Sensitive columns detected: {sensitive_cols}. Ensure anonymization before training.")
 
-        # Anomaly detection
-        try:
-            anomalies = self.anomaly_detector.detect(df)
-            if not anomalies.empty:
-                a = anomalies.iloc[-1]
-                insights.append(f"🚨 Anomaly: {a['category']} - ${a['amount']:.2f} on {a['date']}")
-                insights.append("ℹ️ Transparency: Anomalies flagged using Isolation Forest on spending patterns.")
-        except Exception:
-            insights.append("⚠ Anomaly detection unavailable.")
+        return issues if issues else ["✅ All Responsible AI checks passed."]
 
-        # Category classifier
-        try:
-            if "note" in df.columns and not df["note"].dropna().empty:
-                note = df["note"].dropna().iloc[-1]
-                pred_cat = self.category_classifier.predict(note)
-                insights.append(f"📝 Last note '{mask_sensitive_text(note)}' classified as '{pred_cat}'")
-                insights.append("ℹ️ Transparency: Classification uses TF-IDF + Logistic Regression on note text.")
-        except Exception:
-            insights.append("⚠ Classification unavailable.")
+    # ---------------- Insights ---------------- #
+    def expense_trends(self):
+        if "date" not in self.df.columns or "amount" not in self.df.columns:
+            return None
 
-        # Budget recommendations
-        try:
-            recs = self.budget_recommender.recommend(df)
-            insights.extend(recs)
-            insights.append("ℹ️ Transparency: Recommendations are based on spending cluster analysis.")
-        except Exception:
-            insights.append("⚠ Recommendations unavailable.")
+        self.df["date"] = pd.to_datetime(self.df["date"], errors="coerce")
+        monthly = self.df.groupby(self.df["date"].dt.to_period("M"))["amount"].sum()
 
-        # Personalized alerts
-        try:
-            monthly_exp = df[df["type"] == "expense"].copy()
-            monthly_exp["date"] = pd.to_datetime(monthly_exp["date"])
-            monthly_summary = monthly_exp.groupby(monthly_exp["date"].dt.to_period("M"))["amount"].sum()
+        plt.figure(figsize=(8, 4))
+        monthly.plot(kind="line", marker="o", title="Monthly Expense Trend")
+        plt.ylabel("Total Expense")
+        plt.tight_layout()
+        path = os.path.join(INSIGHTS_DIR, "expense_trend.png")
+        plt.savefig(path)
+        plt.close()
+        return path
 
-            if len(monthly_summary) > 2:
-                recent = monthly_summary.iloc[-1]
-                avg_prev = monthly_summary.iloc[:-1].mean()
+    def anomaly_insights(self):
+        anomalies = self.anomaly_det.detect(self.df)
+        return anomalies.head(5) if not anomalies.empty else None
 
-                if recent > 1.2 * avg_prev:
-                    insights.append(f"⚠️ Alert: Last month’s expenses (${recent:.2f}) are 20% higher than your usual average (${avg_prev:.2f}).")
-                elif recent < 0.8 * avg_prev:
-                    insights.append(f"✅ Great job! Last month’s expenses (${recent:.2f}) are 20% lower than your usual average (${avg_prev:.2f}).")
-        except Exception:
-            insights.append("⚠ Personalized alerts unavailable.")
+    def budget_alignment(self):
+        recs = self.budget_rec.recommend(self.df)
+        return recs.head(5)
 
-        # Trend detection
-        try:
-            monthly_exp = df[df["type"] == "expense"].copy()
-            monthly_exp["date"] = pd.to_datetime(monthly_exp["date"])
-            trend_summary = monthly_exp.groupby(monthly_exp["date"].dt.to_period("M"))["amount"].sum()
+    def savings_forecast(self):
+        if "date" not in self.df.columns or "amount" not in self.df.columns:
+            return None
 
-            if len(trend_summary) > 3:
-                if trend_summary.is_monotonic_increasing:
-                    insights.append("📈 Your expenses are steadily increasing over the last few months.")
-                elif trend_summary.is_monotonic_decreasing:
-                    insights.append("📉 Your expenses are steadily decreasing over the last few months.")
-        except Exception:
-            insights.append("⚠ Trend detection unavailable.")
+        self.df["date"] = pd.to_datetime(self.df["date"], errors="coerce")
+        monthly = self.df.groupby(self.df["date"].dt.to_period("M"))["amount"].sum()
 
+        x = np.arange(len(monthly)).reshape(-1, 1)
+        y = monthly.values
+
+        if len(x) < 2:
+            return None
+
+        coeffs = np.polyfit(x.flatten(), y, 1)
+        forecast_next = coeffs[0] * (len(x) + 1) + coeffs[1]
+
+        return {"last_month": float(y[-1]), "forecast_next_month": float(forecast_next)}
+
+    # ---------------- Run All ---------------- #
+    def generate_all(self):
+        insights = {}
+
+        # Responsible AI
+        insights["responsible_ai"] = self.responsible_ai_checks()
+
+        # Trends
+        insights["expense_trend_chart"] = self.expense_trends()
+
+        # Anomalies
+        insights["anomalies"] = self.anomaly_insights()
+
+        # Budget
+        insights["budget_recommendations"] = self.budget_alignment()
+
+        # Forecast
+        insights["savings_forecast"] = self.savings_forecast()
+
+        logging.info("✅ Insights generated successfully.")
         return insights
+
+
+if __name__ == "__main__":
+    gen = InsightGenerator()
+    result = gen.generate_all()
+
+    print("\n=== Responsible AI Checks ===")
+    for issue in result["responsible_ai"]:
+        print("-", issue)
+
+    print("\n=== Expense Trend Chart ===")
+    print("Saved at:", result["expense_trend_chart"])
+
+    print("\n=== Detected Anomalies ===")
+    print(result["anomalies"])
+
+    print("\n=== Budget Recommendations ===")
+    print(result["budget_recommendations"])
+
+    print("\n=== Savings Forecast ===")
+    print(result["savings_forecast"])
