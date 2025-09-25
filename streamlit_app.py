@@ -674,12 +674,18 @@ def charts_page():
     else:
         st.info("No data available for charts. Add some transactions first!")
 
+
+    if not check_auth():
+        return
+
+   
 def insights_page():
     if not check_auth():
         return
 
     st.header("🧠 AI-Powered Financial Insights")
 
+    insight_agent = st.session_state.architect_agent.insight_agent
     data_agent = st.session_state.architect_agent.data_agent
     df = data_agent.get_transactions_df()
 
@@ -687,90 +693,38 @@ def insights_page():
         st.info("No data available for insights. Add some transactions first!")
         return
 
-    # Initialize Insight Generator
-    from agents.insight_generator import InsightGeneratorAgent
-    gen = InsightGeneratorAgent(df)
-    results = gen.generate_all()
+    # Use the original generate_insights method to avoid complexity
+    try:
+        insights = insight_agent.generate_insights(df)
+        
+        # Simple tab structure
+        tab1, tab2 = st.tabs(["📊 Summary", "🤖 AI Insights"])
 
-    # ---------------- 2-TAB STRUCTURE ----------------
-    tab1, tab2 = st.tabs([
-        "📊 Overview",
-        "🔍 Insights & Risks"
-    ])
+        with tab1:
+            st.subheader("Financial Summary")
+            summary = insight_agent.summarize(df)
+            if isinstance(summary, dict):
+                col1, col2, col3 = st.columns(3)
+                with col1: 
+                    st.metric("Total Income", f"${summary.get('Total Income', 0):,.2f}")
+                with col2: 
+                    st.metric("Total Expenses", f"${summary.get('Total Expense', 0):,.2f}")
+                with col3: 
+                    st.metric("Net Savings", f"${summary.get('Savings', 0):,.2f}")
 
-    # ---------------- TAB 1: OVERVIEW ----------------
-    with tab1:
-        st.subheader("Executive Overview")
+        with tab2:
+            st.subheader("AI-Generated Insights")
+            for insight in insights:
+                if "⚠" in insight or "anomaly" in insight.lower():
+                    st.warning(insight)
+                elif "✅" in insight or "saved" in insight.lower():
+                    st.success(insight)
+                else:
+                    st.info(insight)
 
-        total_income = df[df["type"] == "income"]["amount"].sum()
-        total_expense = df[df["type"] == "expense"]["amount"].sum()
-        savings = total_income - total_expense
-        savings_rate = (savings / total_income * 100) if total_income > 0 else 0
+    except Exception as e:
+        st.error(f"❌ Failed to generate insights: {str(e)}")
 
-        col1, col2, col3, col4 = st.columns(4)
-        with col1: st.metric("Total Income", f"${total_income:,.2f}")
-        with col2: st.metric("Total Expenses", f"${total_expense:,.2f}")
-        with col3: st.metric("Net Savings", f"${savings:,.2f}")
-        with col4: st.metric("Savings Rate", f"{savings_rate:.1f}%")
-
-        # At-a-glance summary
-        if savings_rate > 20:
-            st.success("💡 Great! You're saving above your usual rate.")
-        elif 10 <= savings_rate <= 20:
-            st.info("💡 Keep tracking! Your savings rate is steady.")
-        else:
-            st.warning("⚠️ Savings rate is low. Consider adjusting expenses.")
-
-    # ---------------- TAB 2: INSIGHTS & RISKS ----------------
-    with tab2:
-        st.subheader("AI-Generated Insights & Anomaly Detection")
-
-        # Responsible AI Checks
-        st.markdown("### ⚖️ Responsible AI Checks")
-        for issue in results.get("responsible_ai", []):
-            if "✅" in issue:
-                st.success(issue)
-            else:
-                st.warning(issue)
-        st.divider()
-
-        # Anomalies
-        st.markdown("### ⚠️ Anomalies")
-        anomalies = results.get("anomalies")
-        if anomalies is not None and not anomalies.empty:
-            st.warning(f"{len(anomalies)} anomalies detected in spending patterns")
-            st.dataframe(anomalies.head(10), use_container_width=True)
-        else:
-            st.info("No anomalies detected.")
-
-        # Savings Forecast
-        st.markdown("### 🔮 Savings Forecast")
-        forecast = results.get("savings_forecast")
-        if forecast:
-            col1, col2 = st.columns(2)
-            with col1:
-                st.metric("Last Month Expenses", f"${forecast.get('last_month',0):.2f}")
-            with col2:
-                st.metric("Forecast Next Month", f"${forecast.get('forecast_next_month',0):.2f}")
-        else:
-            st.info("Not enough data to forecast savings.")
-
-        # Budget Recommendations
-        st.markdown("### 💡 Budget Recommendations")
-        recs = results.get("budget_recommendations")
-        if recs is not None and hasattr(recs, 'head') and not recs.empty:
-            st.dataframe(recs, use_container_width=True)
-        else:
-            st.info("No recommendations available.")
-
-        # Expense Trend (from Insight Generator)
-        trend_path = results.get("expense_trend_chart")
-        if trend_path:
-            st.markdown("### 📈 Expense Trend")
-            st.image(trend_path, caption="Monthly Expense Trend", use_container_width=True)
-
-
-import datetime
 def logout():
     # Log the logout event
     if 'user_event_log' not in st.session_state:
@@ -778,7 +732,7 @@ def logout():
     st.session_state.user_event_log.append({
         "event": "logout",
         "user": st.session_state.current_user,
-        "timestamp": datetime.datetime.now().isoformat()
+        "timestamp": datetime.now().isoformat()  # This should work with 'from datetime import datetime'
     })
     st.session_state.logged_in = False
     st.session_state.current_user = None

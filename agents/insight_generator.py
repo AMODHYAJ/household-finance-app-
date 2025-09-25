@@ -1,9 +1,7 @@
-# agents/insight_generator.py
 import pandas as pd
 import numpy as np
 import logging
 import os
-from datetime import datetime
 
 from models.anomaly_detector import AnomalyDetector
 from models.budget_recommender import BudgetRecommender
@@ -32,139 +30,260 @@ class InsightGeneratorAgent:
       - Responsible AI checks
     """
 
-    def __init__(self, df=None, savings_target: float = 5000):
-        if df is None:
-            try:
-                self.df = pd.read_csv(DATA_PATH)
-            except Exception:
-                self.df = pd.DataFrame()
-        else:
-            if hasattr(df, "get_transactions_df") and callable(df.get_transactions_df):
-                try:
-                    self.df = df.get_transactions_df()
-                except Exception:
-                    self.df = pd.DataFrame()
-            elif isinstance(df, pd.DataFrame):
-                self.df = df.copy()
-            else:
-                try:
-                    self.df = pd.DataFrame(df)
-                except Exception:
-                    self.df = pd.DataFrame()
+    def __init__(self, data_agent=None, model_dir="models/"):
+        self.data_agent = data_agent
+        self.model_dir = model_dir
+        os.makedirs(model_dir, exist_ok=True)
 
-        self.anomaly_det = AnomalyDetector(os.path.join(MODEL_DIR, "anomaly_detector.pkl"))
-        self.budget_rec = BudgetRecommender(os.path.join(MODEL_DIR, "budget_recommender.pkl"))
+        # Load models
+        self.anomaly_detector = AnomalyDetector(model_path=os.path.join(model_dir, "anomaly_detector.pkl"))
+        self.budget_recommender = BudgetRecommender(model_path=os.path.join(model_dir, "budget_recommender.pkl"))
+        self.savings_target = 5000
 
-        self.savings_target = savings_target
+    def get_dataframe(self):
+        """Get dataframe from data agent - FIXED version"""
+        try:
+            if self.data_agent is not None and hasattr(self.data_agent, 'get_transactions_df'):
+                df = self.data_agent.get_transactions_df()
+                # Proper way to check if DataFrame is empty
+                if df is not None and not df.empty:
+                    return df
+            return pd.DataFrame()
+        except Exception as e:
+            logging.error(f"Error getting dataframe: {e}")
+            return pd.DataFrame()
 
     # ---------------- Responsible AI ---------------- #
     def responsible_ai_checks(self):
+        """Responsible AI checks - FIXED version"""
         issues = []
-
-        if self.df is None or self.df.empty:
-            return ["⚠️ No data available for Responsible AI checks."]
-
-        # Category balance
-        if "category" in self.df.columns:
-            category_counts = self.df["category"].value_counts(normalize=True)
-            if not category_counts.empty and category_counts.min() < 0.05:
-                issues.append("⚠️ Some categories are underrepresented (<5%) → possible bias.")
-            else:
-                issues.append("✅ Category distribution looks balanced.")
-
-        # Transparency sample
+        
         try:
-            sample = self.df.sample(min(3, len(self.df)))
-            logging.info("Transparency sample logged:")
-            for _, row in sample.iterrows():
-                logging.info(row.to_dict())
-            issues.append("✅ Transparency: sample rows logged.")
-        except Exception as e:
-            logging.warning(f"Transparency check failed: {e}")
-            issues.append("⚠️ Transparency check failed.")
+            df = self.get_dataframe()
+            # Proper DataFrame emptiness check
+            if df is None or df.empty:
+                return ["⚠️ No data available for Responsible AI checks."]
 
-        # Sensitive data
-        sensitive_cols = [c for c in self.df.columns if "name" in c.lower() or "account" in c.lower()]
-        if sensitive_cols:
-            issues.append(f"⚠️ Sensitive columns detected: {sensitive_cols}. Consider anonymization.")
-        else:
-            issues.append("✅ No sensitive columns detected.")
+            # Category balance
+            if "category" in df.columns:
+                category_counts = df["category"].value_counts(normalize=True)
+                if not category_counts.empty and len(category_counts) > 0 and category_counts.min() < 0.05:
+                    issues.append("⚠️ Some categories are underrepresented (<5%) → possible bias.")
+                else:
+                    issues.append("✅ Category distribution looks balanced.")
+
+            # Transparency sample
+            try:
+                sample_size = min(3, len(df))
+                if sample_size > 0:
+                    sample = df.sample(sample_size)
+                    logging.info("Transparency sample logged:")
+                    for _, row in sample.iterrows():
+                        logging.info(row.to_dict())
+                    issues.append("✅ Transparency: sample rows logged.")
+            except Exception as e:
+                logging.warning(f"Transparency check failed: {e}")
+                issues.append("⚠️ Transparency check failed.")
+
+            # Sensitive data check
+            sensitive_cols = [c for c in df.columns if "name" in c.lower() or "account" in c.lower()]
+            if sensitive_cols:
+                issues.append(f"⚠️ Sensitive columns detected: {sensitive_cols}. Consider anonymization.")
+            else:
+                issues.append("✅ No sensitive columns detected.")
+
+        except Exception as e:
+            logging.error(f"Responsible AI checks failed: {e}")
+            issues.append("⚠️ Responsible AI checks failed due to error.")
 
         return issues
 
     # ---------------- Basic Insights ---------------- #
     def summary_stats(self):
-        if self.df is None or self.df.empty:
+        df = self.get_dataframe()
+        if df is None or df.empty:
             return {}
 
-        total_income = self.df[self.df["type"] == "income"]["amount"].sum()
-        total_expense = self.df[self.df["type"] == "expense"]["amount"].sum()
+        total_income = df[df["type"] == "income"]["amount"].sum()
+        total_expense = df[df["type"] == "expense"]["amount"].sum()
         savings = total_income - total_expense
         savings_rate = (savings / total_income * 100) if total_income > 0 else 0
 
+        return {
+            "income": total_income,
+            "expense": total_expense,
+            "savings": savings,
+            "savings_rate": savings_rate
+        }
+
+    def anomaly_insights(self):
+        df = self.get_dataframe()
+        if df is None or df.empty:
+            return pd.DataFrame(), []
+
+        anomalies = pd.DataFrame()
+        messages = []
+        try:
+            anomalies = self.anomaly_detector.detect(df)
+            if not anomalies.empty:
+                for _, row in anomalies.iterrows():
+                    messages.append(
+                        f"⚠️ On {row['date']}, unusual spending detected: ${row['amount']:.2f} in {row['category']}."
+                    )
+        except Exception as e:
+            logging.warning(f"Anomaly detection failed: {e}")
+
+        return anomalies, messages
+
+    # ---------------- Advanced Insights ---------------- #
+    def trend_insights(self):
+        df = self.get_dataframe()
+        if df is None or df.empty:
+            return "No data available for trend analysis."
+
+        if "date" not in df.columns or "amount" not in df.columns:
+            return "Insufficient data for trend analysis."
+
+        df_copy = df.copy()
+        df_copy["date"] = pd.to_datetime(df_copy["date"], errors="coerce")
+        monthly = df_copy.groupby(df_copy["date"].dt.to_period("M"))["amount"].sum()
+
+        if len(monthly) < 3:
+            return "Not enough data for trend detection."
+
+        # Simple trend detection: compare last 3 months
+        last_values = monthly[-3:].values
+        if all(np.diff(last_values) > 0):
+            return "📈 Spending has increased for the past 3 months."
+        elif all(np.diff(last_values) < 0):
+            return "📉 Spending has decreased for the past 3 months."
+        else:
+            return "➡️ Spending shows mixed patterns over the past months."
+
+    def savings_forecast(self):
+        df = self.get_dataframe()
+        if df is None or df.empty:
+            return None
+
+        if "date" not in df.columns or "amount" not in df.columns:
+            return None
+
+        df_copy = df.copy()
+        df_copy["date"] = pd.to_datetime(df_copy["date"], errors="coerce")
+        monthly = df_copy.groupby(df_copy["date"].dt.to_period("M"))["amount"].sum()
+
+        if len(monthly) < 2:
+            return None
+
+        x = np.arange(len(monthly))
+        y = monthly.values
+
+        coeffs = np.polyfit(x, y, 1)
+        forecast_next = float(coeffs[0] * (len(x)) + coeffs[1])
+
+        return {
+            "last_month": float(y[-1]),
+            "forecast_next_month": forecast_next
+        }
+
+    def goal_tracking(self):
+        stats = self.summary_stats()
+        if not stats or stats.get("savings") is None:
+            return "No savings data available."
+
+        progress = (stats["savings"] / self.savings_target) * 100
+        return f"🎯 You have reached {progress:.1f}% of your savings target (${self.savings_target:,.0f})."
+
+    def alerts(self):
+        df = self.get_dataframe()
+        if df is None or df.empty:
+            return []
+
+        if "date" not in df.columns or "amount" not in df.columns:
+            return []
+
+        alerts = []
+        df_copy = df.copy()
+        df_copy["date"] = pd.to_datetime(df_copy["date"], errors="coerce")
+        weekly = df_copy.groupby(df_copy["date"].dt.to_period("W"))["amount"].sum()
+
+        if len(weekly) < 4:
+            return []
+
+        last_week = weekly.iloc[-1]
+        avg_prev = weekly.iloc[:-1].mean()
+
+        if last_week > avg_prev * 1.3:
+            alerts.append("⚠️ This week's expenses are over 30% higher than your usual average.")
+
+        return alerts
+
+    # ---------------- Run All ---------------- #
+    def generate_all(self):
+        insights = {}
+        insights["responsible_ai"] = self.responsible_ai_checks()
+        insights["summary_stats"] = self.summary_stats()
+        anomalies, anomaly_msgs = self.anomaly_insights()
+        insights["anomalies"] = anomalies
+        insights["anomaly_messages"] = anomaly_msgs
+        insights["trend"] = self.trend_insights()
+        insights["forecast"] = self.savings_forecast()
+        insights["goal"] = self.goal_tracking()
+        insights["alerts"] = self.alerts()
+        
+        # Add budget recommendations
+        try:
+            df = self.get_dataframe()
+            insights["budget_recommendations"] = self.budget_recommender.recommend(df)
+        except Exception as e:
+            insights["budget_recommendations"] = ["Budget recommendations unavailable"]
+            
+        return insights
+
+    # Keep the original methods for backward compatibility
+    def summarize(self, df=None):
+        if df is None:
+            df = self.get_dataframe()
+        if df is None or df.empty:
+            return "No transactions yet."
+        total_income = df[df["type"] == "income"]["amount"].sum()
+        total_expense = df[df["type"] == "expense"]["amount"].sum()
         return {
             "Total Income": round(total_income, 2),
             "Total Expense": round(total_expense, 2),
             "Savings": round(total_income - total_expense, 2)
         }
 
-    def generate_insights(self, df):
+    def generate_insights(self, df=None):
+        if df is None:
+            df = self.get_dataframe()
         if df is None or df.empty:
             return ["No data available."]
 
+        # Use the new generate_all method but format for backward compatibility
+        all_insights = self.generate_all()
         insights = []
-
-        # Income vs Expense check
-        income = df[df["type"] == "income"]["amount"].sum()
-        expense = df[df["type"] == "expense"]["amount"].sum()
-        if expense > income:
-            insights.append("⚠ You spent more than you earned.")
-            insights.append("[Explainability] This insight is generated by comparing total expenses and income. Spending exceeded earnings.")
-        else:
-            insights.append("✅ You saved money overall.")
-            insights.append("[Explainability] This insight is generated by comparing total expenses and income. You saved money.")
-
-        # Expense prediction
-        try:
-            last_date = pd.to_datetime(df["date"]).max()
-            next_month = (last_date.month % 12) + 1
-            next_year = last_date.year + (1 if last_date.month == 12 else 0)
-            pred = self.expense_predictor.predict_next_month(next_month, next_year)
-            insights.append(f"📅 Predicted expenses for {next_month}/{next_year}: ${pred:.2f}")
-            insights.append(f"[Explainability] This prediction uses a linear regression model trained on past monthly expenses.")
-        except Exception:
-            insights.append("⚠ Prediction unavailable.")
-            insights.append("[Explainability] Prediction failed due to missing or invalid data.")
-
-        # Anomaly detection
-        try:
-            anomalies = self.anomaly_det.detect(self.df)
-            if not anomalies.empty:
-                a = anomalies.iloc[-1]
-                insights.append(f"🚨 Anomaly: {a['category']} - ${a['amount']:.2f} on {a['date']}")
-                insights.append(f"[Explainability] This anomaly was detected using Isolation Forest on expense amounts.")
-        except Exception:
-            insights.append("⚠ Anomaly detection unavailable.")
-            insights.append("[Explainability] Anomaly detection failed due to missing or invalid data.")
-
-        # Category classifier
-        try:
-            if "note" in df.columns and not df["note"].dropna().empty:
-                note = df["note"].dropna().iloc[-1]
-                pred_cat = self.category_classifier.predict(note)
-                insights.append(f"📝 Last note '{note}' classified as '{pred_cat}'")
-                insights.append(f"[Explainability] This classification uses a Naive Bayes model trained on transaction notes and categories.")
-        except Exception:
-            insights.append("⚠ Classification unavailable.")
-            insights.append("[Explainability] Classification failed due to missing or invalid data.")
-
-        # Budget recommendations
-        try:
-            recs = self.budget_recommender.recommend(df)
-            insights.extend(recs)
-            insights.append("[Explainability] Recommendations are generated based on spending patterns and budgeting rules.")
-        except Exception:
-            insights.append("⚠ Recommendations unavailable.")
-            insights.append("[Explainability] Recommendation generation failed due to missing or invalid data.")
-
+        
+        # Format insights for the original method's expected output
+        stats = all_insights.get("summary_stats", {})
+        if stats:
+            income = stats.get("income", 0)
+            expense = stats.get("expense", 0)
+            if expense > income:
+                insights.append("⚠ You spent more than you earned.")
+            else:
+                insights.append("✅ You saved money overall.")
+        
+        # Add anomaly messages
+        insights.extend(all_insights.get("anomaly_messages", []))
+        
+        # Add trend insights
+        trend = all_insights.get("trend", "")
+        if trend:
+            insights.append(trend)
+            
+        # Add budget recommendations
+        recs = all_insights.get("budget_recommendations", [])
+        insights.extend(recs)
+        
         return insights
