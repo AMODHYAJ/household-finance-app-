@@ -15,7 +15,7 @@ class InsightGeneratorAgent:
         self.expense_predictor = ExpensePredictor(model_path=os.path.join(model_dir, "expense_predictor.pkl"))
         self.anomaly_detector = AnomalyDetector(model_path=os.path.join(model_dir, "anomaly_detector.pkl"))
         self.category_classifier = CategoryClassifier(model_path=os.path.join(model_dir, "category_classifier.pkl"))
-        self.budget_recommender = BudgetRecommender()
+        self.budget_recommender = BudgetRecommender(model_path=os.path.join(model_dir, "budget_recommender.pkl"))
 
     def summarize(self, df):
         if df is None or df.empty:
@@ -72,5 +72,36 @@ class InsightGeneratorAgent:
             insights.extend(self.budget_recommender.recommend(df))
         except Exception:
             insights.append("⚠ Recommendations unavailable.")
+
+        # Personalized alerts
+        try:
+            monthly_exp = df[df["type"] == "expense"].copy()
+            monthly_exp["date"] = pd.to_datetime(monthly_exp["date"])
+            monthly_summary = monthly_exp.groupby(monthly_exp["date"].dt.to_period("M"))["amount"].sum()
+
+            if len(monthly_summary) > 2:
+                recent = monthly_summary.iloc[-1]
+                avg_prev = monthly_summary.iloc[:-1].mean()
+
+                if recent > 1.2 * avg_prev:
+                    insights.append(f"⚠️ Alert: Last month’s expenses (${recent:.2f}) are 20% higher than your usual average (${avg_prev:.2f}).")
+                elif recent < 0.8 * avg_prev:
+                    insights.append(f"✅ Great job! Last month’s expenses (${recent:.2f}) are 20% lower than your usual average (${avg_prev:.2f}).")
+        except Exception:
+            insights.append("⚠ Personalized alerts unavailable.")
+
+        # Trend detection
+        try:
+            monthly_exp = df[df["type"] == "expense"].copy()
+            monthly_exp["date"] = pd.to_datetime(monthly_exp["date"])
+            trend_summary = monthly_exp.groupby(monthly_exp["date"].dt.to_period("M"))["amount"].sum()
+
+            if len(trend_summary) > 3:
+                if trend_summary.is_monotonic_increasing:
+                    insights.append("📈 Your expenses are steadily increasing over the last few months.")
+                elif trend_summary.is_monotonic_decreasing:
+                    insights.append("📉 Your expenses are steadily decreasing over the last few months.")
+        except Exception:
+            insights.append("⚠ Trend detection unavailable.")
 
         return insights
