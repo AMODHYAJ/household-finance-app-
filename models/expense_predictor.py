@@ -30,9 +30,7 @@ class ExpensePredictor:
         if self.model is None:
             with open(self.model_path, "rb") as f:
                 self.model = pickle.load(f)
-        # Use DataFrame with feature names to avoid warning
-        X_pred = pd.DataFrame([[year, month]], columns=["year", "month"])
-        return self.model.predict(X_pred)[0]
+        return self.model.predict([[year, month]])[0]
 
     def evaluate(self, test_df):
         test_df = test_df[test_df["type"] == "expense"].copy()
@@ -47,6 +45,5 @@ class ExpensePredictor:
 
         X_test = monthly[["year", "month"]]
         y_test = monthly["amount"]
-        # Use DataFrame with feature names to avoid warning
         preds = self.model.predict(X_test)
         return np.mean(np.abs(preds - y_test))  # MAE
