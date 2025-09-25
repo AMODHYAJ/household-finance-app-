@@ -495,7 +495,7 @@ def insights_page():
                         'Total': '${:,.2f}',
                         'Average': '${:,.2f}'
                     }),
-                    use_container_width=True
+                    width='stretch'
                 )
 
                 # Highlight top category
