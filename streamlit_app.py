@@ -678,94 +678,96 @@ def insights_page():
     if not check_auth():
         return
 
-    st.header("🧠 AI-Powered Insights")
+    st.header("🧠 AI-Powered Financial Insights")
 
-    insight_agent = st.session_state.architect_agent.insight_agent
     data_agent = st.session_state.architect_agent.data_agent
     df = data_agent.get_transactions_df()
 
-    if df is not None and not df.empty:
-        # Tabs for different insights
-        tab1, tab2, tab3 = st.tabs(["📊 Summary", "🎯 Category Analysis", "🤖 AI Insights"])
-
-        # --- TAB 1: SUMMARY ---
-        with tab1:
-            st.subheader("Financial Summary")
-
-            total_income = df[df["type"] == "income"]["amount"].sum()
-            total_expense = df[df["type"] == "expense"]["amount"].sum()
-            savings = total_income - total_expense
-
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("Total Income", f"${total_income:,.2f}")
-            with col2:
-                st.metric("Total Expenses", f"${total_expense:,.2f}")
-            with col3:
-                delta_color = "normal" if savings >= 0 else "inverse"
-                st.metric("Net Savings", f"${savings:,.2f}",
-                          delta=f"${savings:,.2f}", delta_color=delta_color)
-
-            if total_income > 0:
-                savings_rate = (savings / total_income) * 100
-                st.metric("Savings Rate", f"{savings_rate:.1f}%")
-
-        # --- TAB 2: CATEGORY ANALYSIS ---
-        with tab2:
-            st.subheader("Category Analysis")
-
-            expenses_df = df[df["type"] == "expense"]
-            if not expenses_df.empty:
-                category_analysis = expenses_df.groupby("category")["amount"].agg(['sum', 'mean', 'count'])
-                category_analysis.columns = ['Total', 'Average', 'Count']
-                category_analysis = category_analysis.sort_values('Total', ascending=False)
-
-                st.dataframe(
-                    category_analysis.style.format({
-                        'Total': '${:,.2f}',
-                        'Average': '${:,.2f}'
-                    }),
-                    width='stretch'
-                )
-
-                # Highlight top category
-                top_category = category_analysis.index[0]
-                top_amount = category_analysis.loc[top_category, 'Total']
-                st.info(f"🎯 Highest expense category: **{top_category}** (${top_amount:,.2f})")
-            else:
-                st.warning("No expense data available for category analysis.")
-
-        # --- TAB 3: AI INSIGHTS ---
-        with tab3:
-            st.subheader("AI-Generated Insights")
-
-            if st.button("✨ Generate AI Insights", type="primary"):
-                with st.spinner("Analyzing your financial data..."):
-                    try:
-                        # Use your custom agent to generate insights
-                        insights = insight_agent.generate_insights(df)
-
-                        if insights:
-                            for i, insight in enumerate(insights, 1):
-                                st.write(f"{i}. {insight}")
-                        else:
-                            st.info("No significant insights generated. Try adding more data.")
-
-                        # Additional recommendations
-                        st.subheader("💡 Recommendations")
-                        recommendations = [
-                            "Set up automatic savings transfers to build an emergency fund",
-                            "Review and negotiate recurring subscriptions and bills",
-                            "Consider applying the 50/30/20 budgeting rule",
-                            "Track daily expenses to identify spending patterns"
-                        ]
-                        for rec in recommendations:
-                            st.write(f"• {rec}")
-
-                    except Exception as e:
-                        st.error(f"❌ Failed to generate insights: {str(e)}")
-    else:
+    if df is None or df.empty:
         st.info("No data available for insights. Add some transactions first!")
+        return
+
+    # Initialize Insight Generator
+    from agents.insight_generator import InsightGeneratorAgent
+    gen = InsightGeneratorAgent(df)
+    results = gen.generate_all()
+
+    # ---------------- 2-TAB STRUCTURE ----------------
+    tab1, tab2 = st.tabs([
+        "📊 Overview",
+        "🔍 Insights & Risks"
+    ])
+
+    # ---------------- TAB 1: OVERVIEW ----------------
+    with tab1:
+        st.subheader("Executive Overview")
+
+        total_income = df[df["type"] == "income"]["amount"].sum()
+        total_expense = df[df["type"] == "expense"]["amount"].sum()
+        savings = total_income - total_expense
+        savings_rate = (savings / total_income * 100) if total_income > 0 else 0
+
+        col1, col2, col3, col4 = st.columns(4)
+        with col1: st.metric("Total Income", f"${total_income:,.2f}")
+        with col2: st.metric("Total Expenses", f"${total_expense:,.2f}")
+        with col3: st.metric("Net Savings", f"${savings:,.2f}")
+        with col4: st.metric("Savings Rate", f"{savings_rate:.1f}%")
+
+        # At-a-glance summary
+        if savings_rate > 20:
+            st.success("💡 Great! You're saving above your usual rate.")
+        elif 10 <= savings_rate <= 20:
+            st.info("💡 Keep tracking! Your savings rate is steady.")
+        else:
+            st.warning("⚠️ Savings rate is low. Consider adjusting expenses.")
+
+    # ---------------- TAB 2: INSIGHTS & RISKS ----------------
+    with tab2:
+        st.subheader("AI-Generated Insights & Anomaly Detection")
+
+        # Responsible AI Checks
+        st.markdown("### ⚖️ Responsible AI Checks")
+        for issue in results.get("responsible_ai", []):
+            if "✅" in issue:
+                st.success(issue)
+            else:
+                st.warning(issue)
+        st.divider()
+
+        # Anomalies
+        st.markdown("### ⚠️ Anomalies")
+        anomalies = results.get("anomalies")
+        if anomalies is not None and not anomalies.empty:
+            st.warning(f"{len(anomalies)} anomalies detected in spending patterns")
+            st.dataframe(anomalies.head(10), use_container_width=True)
+        else:
+            st.info("No anomalies detected.")
+
+        # Savings Forecast
+        st.markdown("### 🔮 Savings Forecast")
+        forecast = results.get("savings_forecast")
+        if forecast:
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("Last Month Expenses", f"${forecast.get('last_month',0):.2f}")
+            with col2:
+                st.metric("Forecast Next Month", f"${forecast.get('forecast_next_month',0):.2f}")
+        else:
+            st.info("Not enough data to forecast savings.")
+
+        # Budget Recommendations
+        st.markdown("### 💡 Budget Recommendations")
+        recs = results.get("budget_recommendations")
+        if recs is not None and hasattr(recs, 'head') and not recs.empty:
+            st.dataframe(recs, use_container_width=True)
+        else:
+            st.info("No recommendations available.")
+
+        # Expense Trend (from Insight Generator)
+        trend_path = results.get("expense_trend_chart")
+        if trend_path:
+            st.markdown("### 📈 Expense Trend")
+            st.image(trend_path, caption="Monthly Expense Trend", use_container_width=True)
 
 
 import datetime

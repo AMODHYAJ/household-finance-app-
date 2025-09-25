@@ -9,9 +9,18 @@ class AnomalyDetector:
 
     def train(self, df):
         expenses = df[df["type"] == "expense"].copy()
+        if expenses.empty:
+            print("⚠️ No expense data available for anomaly detection training.")
+            return
+
         X = expenses[["amount"]]
-        self.model = IsolationForest(contamination=0.05, random_state=42)
+        self.model = IsolationForest(
+            n_estimators=300,
+            contamination=0.05,
+            random_state=42
+        )
         self.model.fit(X)
+
         with open(self.model_path, "wb") as f:
             pickle.dump(self.model, f)
 
@@ -27,4 +36,3 @@ class AnomalyDetector:
         X = expenses[["amount"]]
         expenses["anomaly"] = self.model.predict(X)
         return expenses[expenses["anomaly"] == -1]  # anomalies
-

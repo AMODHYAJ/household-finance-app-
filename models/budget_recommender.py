@@ -1,21 +1,88 @@
 import pandas as pd
+import pickle
+from sklearn.preprocessing import StandardScaler
+from sklearn.cluster import KMeans
 
 class BudgetRecommender:
+    def __init__(self, model_path="models/budget_recommender.pkl"):
+        self.model_path = model_path
+        self.model = None
+        self.scaler = None
+
+    def train(self, df):
+        expenses = df[df["type"] == "expense"].copy()
+        if expenses.empty:
+            print("⚠️ Not enough data to train Budget Recommender.")
+            return
+
+        expenses["date"] = pd.to_datetime(expenses["date"])
+        expenses["month"] = expenses["date"].dt.to_period("M")
+        pivot = expenses.pivot_table(
+            index="month",
+            columns="category",
+            values="amount",
+            aggfunc="sum",
+            fill_value=0
+        )
+
+        if pivot.empty:
+            return
+
+        self.scaler = StandardScaler()
+        X_scaled = self.scaler.fit_transform(pivot)
+
+        self.model = KMeans(n_clusters=3, random_state=42, n_init=10)
+        self.model.fit(X_scaled)
+
+        with open(self.model_path, "wb") as f:
+            pickle.dump((self.model, self.scaler), f)
+
     def recommend(self, df):
         if df is None or df.empty:
-            return ["No data for budget recommendations."]
+            return ["📌 No data available. Start logging expenses to get tailored insights."]
 
-        expenses = df[df["type"] == "expense"]
+        if self.model is None or self.scaler is None:
+            try:
+                with open(self.model_path, "rb") as f:
+                    self.model, self.scaler = pickle.load(f)
+            except:
+                return ["⚠ No trained model found. Train the model before requesting recommendations."]
+
+        expenses = df[df["type"] == "expense"].copy()
         if expenses.empty:
-            return ["No expenses found."]
+            return ["📌 No expenses recorded yet. Try setting a starter budget for essentials and savings."]
+
+        expenses["date"] = pd.to_datetime(expenses["date"])
+        last_month = expenses["date"].dt.to_period("M").max()
+        pivot = expenses[expenses["date"].dt.to_period("M") == last_month]
+
+        pivot["month"] = pivot["date"].dt.to_period("M")
+        pivot = pivot.pivot_table(
+            index="month",
+            columns="category",
+            values="amount",
+            aggfunc="sum",
+            fill_value=0
+        )
+
+        if pivot.empty:
+            return ["📌 Not enough data for last month. Keep tracking expenses for better insights."]
+
+        try:
+            X_scaled = self.scaler.transform(pivot)
+            cluster = self.model.predict(X_scaled)[0]
+        except Exception:
+            return ["⚠ Unable to analyze spending patterns. Consider adding more data."]
 
         recs = []
-        by_cat = expenses.groupby("category")["amount"].sum().sort_values(ascending=False)
-        top_cat = by_cat.index[0]
+        if cluster == 0:
+            recs.append("💡 You spend heavily in one category. Set a cap for it to free up savings.")
+        elif cluster == 1:
+            recs.append("✅ Your spending is balanced across categories. Maintain at least 20% savings.")
+        elif cluster == 2:
+            recs.append("⚠ You have irregular big expenses. Build an emergency fund to stay safe.")
 
-        recs.append(f"💡 Most of your spending is in '{top_cat}'. Consider reducing it by 10%.")
-        if expenses["amount"].max() > expenses["amount"].mean() * 2:
-            recs.append("⚠ You have some unusually high expenses. Review them for possible savings.")
-        recs.append("✅ Set aside at least 20% of your income as savings.")
+        if not recs:
+            recs.append("📌 Maintain consistent tracking of income & expenses to improve recommendations.")
 
         return recs
