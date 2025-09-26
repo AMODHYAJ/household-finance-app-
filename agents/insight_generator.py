@@ -148,17 +148,26 @@ class InsightGeneratorAgent:
         df_copy["date"] = pd.to_datetime(df_copy["date"], errors="coerce")
         monthly = df_copy.groupby(df_copy["date"].dt.to_period("M"))["amount"].sum()
 
-        if len(monthly) < 3:
-            return "Not enough data for trend detection."
+        if len(monthly) < 2:
+            # Not enough for a trend, but show the only month
+            if len(monthly) == 1:
+                month = str(monthly.index[0])
+                amount = monthly.iloc[0]
+                return f"Only one month of data: {month} total spending was ${amount:.2f}."
+            else:
+                return "Not enough data for trend detection."
 
-        # Simple trend detection: compare last 3 months
-        last_values = monthly[-3:].values
-        if all(np.diff(last_values) > 0):
-            return "📈 Spending has increased for the past 3 months."
-        elif all(np.diff(last_values) < 0):
-            return "📉 Spending has decreased for the past 3 months."
-        else:
-            return "➡️ Spending shows mixed patterns over the past months."
+       # Simple trend detection: compare last 2 or 3 months
+            last_values = monthly[-3:].values
+            if len(last_values) >= 2:
+                if all(np.diff(last_values) > 0):
+                    return "📈 Spending has increased over the last months."
+                elif all(np.diff(last_values) < 0):
+                    return "📉 Spending has decreased over the last months."
+                else:
+                    return "➡️ Spending shows mixed patterns recently."
+            else:
+                return "Not enough data for trend detection."
 
     def savings_forecast(self):
         df = self.get_dataframe()
@@ -172,19 +181,26 @@ class InsightGeneratorAgent:
         df_copy["date"] = pd.to_datetime(df_copy["date"], errors="coerce")
         monthly = df_copy.groupby(df_copy["date"].dt.to_period("M"))["amount"].sum()
 
-        if len(monthly) < 2:
+       if len(monthly) < 1:
             return None
+        elif len(monthly) == 1:
+            # Only one month, so just repeat that value as a "forecast"
+            last_month = float(monthly.iloc[0])
+            return {
+                "last_month": last_month,
+                "forecast_next_month": last_month
+            }
+        else:
+            x = np.arange(len(monthly))
+            y = monthly.values
 
-        x = np.arange(len(monthly))
-        y = monthly.values
+            coeffs = np.polyfit(x, y, 1)
+            forecast_next = float(coeffs[0] * (len(x)) + coeffs[1])
 
-        coeffs = np.polyfit(x, y, 1)
-        forecast_next = float(coeffs[0] * (len(x)) + coeffs[1])
-
-        return {
-            "last_month": float(y[-1]),
-            "forecast_next_month": forecast_next
-        }
+            return {
+                "last_month": float(y[-1]),
+                "forecast_next_month": forecast_next
+            }
 
     def goal_tracking(self):
         stats = self.summary_stats()
@@ -207,14 +223,21 @@ class InsightGeneratorAgent:
         df_copy["date"] = pd.to_datetime(df_copy["date"], errors="coerce")
         weekly = df_copy.groupby(df_copy["date"].dt.to_period("W"))["amount"].sum()
 
-        if len(weekly) < 4:
-            return []
+        if len(weekly) < 2:
+            # Not enough for a weekly comparison, but show last week
+            if len(weekly) == 1:
+                week = str(weekly.index[0])
+                amount = weekly.iloc[0]
+                alerts.append(f"Only one week of data: {week} total spending was ${amount:.2f}.")
+            return alerts
 
         last_week = weekly.iloc[-1]
         avg_prev = weekly.iloc[:-1].mean()
 
         if last_week > avg_prev * 1.3:
             alerts.append("⚠️ This week's expenses are over 30% higher than your usual average.")
+        else:
+            alerts.append("✅ This week's expenses are within your usual range.")
 
         return alerts
 
