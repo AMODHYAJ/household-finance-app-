@@ -242,7 +242,14 @@ class InsightGeneratorAgent:
             recs.append("Add some transactions to receive personalized budget recommendations.")
             return recs
 
-        if len(df) < 3:
+        # Fill missing categories with 'Uncategorized'
+        if "category" in df.columns:
+            df["category"] = df["category"].fillna("Uncategorized")
+        else:
+            df["category"] = "Uncategorized"
+
+        # If fewer than 10 records, give simple, actionable advice
+        if len(df) < 10:
             recs.append("Track a few more transactions for tailored budget advice.")
             recs.append("Tip: Categorize your expenses to see where your money goes.")
             if "amount" in df.columns:
@@ -250,12 +257,28 @@ class InsightGeneratorAgent:
                 recs.append(f"Your average transaction so far is ${avg:.2f}.")
             return recs
 
+        # For 10 or more records, try the model, but always provide a fallback
         try:
             recs = self.budget_recommender.recommend(df)
-            if not recs:
-                recs.append("No specific recommendations at this time. Keep tracking your spending!")
+            # Ensure recs is always a list
+            if isinstance(recs, str):
+                recs = [recs]
+            # If the model returns nothing or any warning, add a fallback
+            warning_phrases = [
+                "unable to analyze", "add more data", "not enough data", "insufficient data"
+            ]
+            if (not recs or
+                any(any(w in r.lower() for w in warning_phrases) for r in recs)):
+                recs = [
+                    "No specific recommendations at this time. Keep tracking your spending!",
+                    "Tip: Review your top expense categories for potential savings.",
+                    f"Your average transaction is ${df['amount'].mean():.2f}."
+                ]
         except Exception:
-            recs.append("Could not generate recommendations due to a system error.")
+            recs = [
+                "Could not generate recommendations due to a system error.",
+                "Tip: Review your top expense categories for potential savings."
+            ]
         return recs
 
     # ---------------- Run All ---------------- #

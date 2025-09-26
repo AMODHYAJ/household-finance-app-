@@ -237,3 +237,15 @@
 2025-09-26 11:21:57,591 - INFO - {'id': 58, 'date': datetime.date(2025, 9, 26), 'type': 'income', 'category': 'Salary', 'amount': 200000.0, 'note': 'salary'}
 2025-09-26 11:21:57,591 - INFO - {'id': 51, 'date': datetime.date(2025, 9, 29), 'type': 'expense', 'category': 'food', 'amount': 5000.0, 'note': 'restaurant dining'}
 2025-09-26 11:21:57,591 - INFO - {'id': 60, 'date': datetime.date(2025, 9, 26), 'type': 'expense', 'category': 'Entertainment', 'amount': 10000.0, 'note': 'party food expense'}
+2025-09-26 12:10:26,658 - INFO - Transparency sample logged:
+2025-09-26 12:10:26,659 - INFO - {'id': 45, 'date': datetime.date(2025, 9, 26), 'type': 'expense', 'category': 'Entertainment', 'amount': 2000.0, 'note': 'pizza takeway'}
+2025-09-26 12:10:26,659 - INFO - {'id': 5, 'date': datetime.date(2025, 9, 6), 'type': 'expense', 'category': 'food', 'amount': 5000.0, 'note': 'birthday pizza large'}
+2025-09-26 12:10:26,659 - INFO - {'id': 59, 'date': datetime.date(2025, 9, 26), 'type': 'expense', 'category': 'Entertainment', 'amount': 20000.0, 'note': 'grocery shopping'}
+2025-09-26 12:16:40,376 - INFO - Transparency sample logged:
+2025-09-26 12:16:40,376 - INFO - {'id': 59, 'date': datetime.date(2025, 9, 26), 'type': 'expense', 'category': 'Entertainment', 'amount': 20000.0, 'note': 'grocery shopping'}
+2025-09-26 12:16:40,376 - INFO - {'id': 62, 'date': datetime.date(2025, 9, 26), 'type': 'income', 'category': 'Entertainment', 'amount': 10000.0, 'note': 'mobile data and internet bills'}
+2025-09-26 12:16:40,376 - INFO - {'id': 52, 'date': datetime.date(2025, 10, 9), 'type': 'expense', 'category': 'Entertainment', 'amount': 750.0, 'note': 'museum education trip '}
+2025-09-26 12:17:21,164 - INFO - Transparency sample logged:
+2025-09-26 12:17:21,164 - INFO - {'id': 55, 'date': datetime.date(2025, 9, 29), 'type': 'expense', 'category': 'Rent', 'amount': 390000.0, 'note': 'semester payment'}
+2025-09-26 12:17:21,164 - INFO - {'id': 47, 'date': datetime.date(2025, 9, 10), 'type': 'expense', 'category': 'bills', 'amount': 5000.0, 'note': 'electricity and water bills'}
+2025-09-26 12:17:21,165 - INFO - {'id': 2, 'date': datetime.date(2025, 9, 1), 'type': 'income', 'category': 'salary', 'amount': 50000.0, 'note': 'bonus added'}
