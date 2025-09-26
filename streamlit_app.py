@@ -789,52 +789,81 @@ def charts_page():
     else:
         st.info("No data available for charts. Add some transactions first!")
 
+import streamlit as st
+from agents.insight_generator import InsightGeneratorAgent
+
 def insights_page():
-    if not check_auth():
-        return
+    st.title("💡 Financial Insights Dashboard")
 
-    st.header("🧠 AI-Powered Financial Insights")
-
-    insight_agent = st.session_state.architect_agent.insight_agent
+    # Access data_agent from session state
     data_agent = st.session_state.architect_agent.data_agent
-    df = data_agent.get_transactions_df()
+    agent = InsightGeneratorAgent(data_agent=data_agent)
+    insights = agent.generate_all()
 
-    if df is None or df.empty:
-        st.info("No data available for insights. Add some transactions first!")
-        return
+    # --- Summary Section ---
+    st.subheader("📊 Summary Statistics")
+    stats = insights.get("summary_stats", {})
+    if stats:
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric("Income", f"${stats.get('income', 0):,.2f}")
+        col2.metric("Expense", f"${stats.get('expense', 0):,.2f}")
+        col3.metric("Savings", f"${stats.get('savings', 0):,.2f}")
+        col4.metric("Savings Rate", f"{stats.get('savings_rate', 0):.1f}%")
+    else:
+        st.info("No summary statistics available.")
 
-    # Use the original generate_insights method to avoid complexity
-    try:
-        insights = insight_agent.generate_insights(df)
-        
-        # Simple tab structure
-        tab1, tab2 = st.tabs(["📊 Summary", "🤖 AI Insights"])
+    # --- Trend Section ---
+    st.subheader("📈 Trends & Forecasts")
+    trend = insights.get("trend", "")
+    forecast = insights.get("forecast", {})
+    if trend:
+        st.write(trend)
+    if forecast:
+        st.write(f"**Last Month's Spending:** ${forecast.get('last_month', 0):,.2f}")
+        st.write(f"**Forecast Next Month:** ${forecast.get('forecast_next_month', 0):,.2f}")
 
-        with tab1:
-            st.subheader("Financial Summary")
-            summary = insight_agent.summarize(df)
-            if isinstance(summary, dict):
-                col1, col2, col3 = st.columns(3)
-                with col1: 
-                    st.metric("Total Income", f"${summary.get('Total Income', 0):,.2f}")
-                with col2: 
-                    st.metric("Total Expenses", f"${summary.get('Total Expense', 0):,.2f}")
-                with col3: 
-                    st.metric("Net Savings", f"${summary.get('Savings', 0):,.2f}")
+    # --- Goal Tracking ---
+    st.subheader("🎯 Goal Tracking")
+    goal = insights.get("goal", "")
+    if goal:
+        st.write(goal)
 
-        with tab2:
-            st.subheader("AI-Generated Insights")
-            for insight in insights:
-                if "⚠" in insight or "anomaly" in insight.lower():
-                    st.warning(insight)
-                elif "✅" in insight or "saved" in insight.lower():
-                    st.success(insight)
-                else:
-                    st.info(insight)
+    # --- Alerts ---
+    st.subheader("🚨 Alerts")
+    alerts = insights.get("alerts", [])
+    if alerts:
+        for alert in alerts:
+            st.warning(alert)
+    else:
+        st.success("No alerts at this time.")
 
-    except Exception as e:
-        st.error(f"❌ Failed to generate insights: {str(e)}")
+    # --- Anomalies ---
+    st.subheader("🔎 Anomaly Detection")
+    anomaly_msgs = insights.get("anomaly_messages", [])
+    if anomaly_msgs:
+        for msg in anomaly_msgs:
+            st.error(msg)
+    else:
+        st.success("No anomalies detected.")
 
+    # --- Budget Recommendations ---
+    st.subheader("💡 Budget Recommendations")
+    recs = insights.get("budget_recommendations", [])
+    if recs:
+        for rec in recs:
+            st.info(rec)
+    else:
+        st.info("No budget recommendations available.")
+
+    # --- Responsible AI ---
+    st.subheader("🤖 Responsible AI Checks")
+    ai_checks = insights.get("responsible_ai", [])
+    for check in ai_checks:
+        if "⚠️" in check:
+            st.warning(check)
+        else:
+            st.success(check)
+            
 def logout():
     # Log the logout event
     if 'user_event_log' not in st.session_state:
