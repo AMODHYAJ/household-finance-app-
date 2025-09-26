@@ -85,6 +85,56 @@
 2025-09-26 00:05:17,287 - INFO - {'id': 3, 'date': datetime.date(2025, 9, 1), 'type': 'expense', 'category': 'educational', 'amount': 2200.0, 'note': 'official chess tshirt 2025/26'}
 2025-09-26 00:05:17,287 - INFO - {'id': 18, 'date': datetime.date(2025, 9, 25), 'type': 'expense', 'category': 'food', 'amount': 5000.0, 'note': 'taco bell - classic burrito'}
 2025-09-26 00:05:17,288 - INFO - {'id': 2, 'date': datetime.date(2025, 9, 1), 'type': 'income', 'category': 'salary', 'amount': 50000.0, 'note': 'bonus added'}
+<<<<<<< HEAD
+2025-09-26 08:39:03,919 - INFO - Transparency sample logged:
+2025-09-26 08:39:03,919 - INFO - {'id': 7, 'date': datetime.date(2025, 9, 1), 'type': 'expense', 'category': 'shopping', 'amount': 6000.0, 'note': 'new semester clothes'}
+2025-09-26 08:39:03,920 - INFO - {'id': 2, 'date': datetime.date(2025, 9, 1), 'type': 'income', 'category': 'salary', 'amount': 50000.0, 'note': 'bonus added'}
+2025-09-26 08:39:03,920 - INFO - {'id': 24, 'date': datetime.date(2025, 9, 27), 'type': 'expense', 'category': 'education', 'amount': 1000.0, 'note': 'research printouts'}
+2025-09-26 10:28:16,388 - INFO - Transparency sample logged:
+2025-09-26 10:28:16,388 - INFO - {'id': 7, 'date': datetime.date(2025, 9, 1), 'type': 'expense', 'category': 'shopping', 'amount': 6000.0, 'note': 'new semester clothes'}
+2025-09-26 10:28:16,389 - INFO - {'id': 4, 'date': datetime.date(2025, 9, 3), 'type': 'expense', 'category': 'transport', 'amount': 1000.0, 'note': 'total bus fare 5 days'}
+2025-09-26 10:28:16,389 - INFO - {'id': 24, 'date': datetime.date(2025, 9, 27), 'type': 'expense', 'category': 'education', 'amount': 1000.0, 'note': 'research printouts'}
+2025-09-26 10:28:57,997 - INFO - Transparency sample logged:
+2025-09-26 10:28:58,005 - INFO - {'id': 17, 'date': datetime.date(2025, 9, 16), 'type': 'expense', 'category': 'education', 'amount': 5000.0, 'note': 'robotic exhibition'}
+2025-09-26 10:28:58,006 - INFO - {'id': 6, 'date': datetime.date(2025, 9, 1), 'type': 'expense', 'category': 'bills', 'amount': 8000.0, 'note': 'electricity bill August'}
+2025-09-26 10:28:58,007 - INFO - {'id': 4, 'date': datetime.date(2025, 9, 3), 'type': 'expense', 'category': 'transport', 'amount': 1000.0, 'note': 'total bus fare 5 days'}
+2025-09-26 10:38:19,794 - INFO - Transparency sample logged:
+2025-09-26 10:38:19,795 - INFO - {'id': 21, 'date': datetime.date(2025, 9, 25), 'type': 'expense', 'category': 'transport', 'amount': 440.0, 'note': 'bus and three wheel fare'}
+2025-09-26 10:38:19,795 - INFO - {'id': 25, 'date': datetime.date(2025, 9, 28), 'type': 'expense', 'category': 'Entertainment', 'amount': 4000.0, 'note': 'shopping mid'}
+2025-09-26 10:38:19,795 - INFO - {'id': 9, 'date': datetime.date(2025, 9, 1), 'type': 'expense', 'category': 'bills', 'amount': 6000.0, 'note': 'water bill August'}
+2025-09-26 10:42:55,351 - INFO - Transparency sample logged:
+2025-09-26 10:42:55,351 - INFO - {'id': 6, 'date': datetime.date(2025, 9, 1), 'type': 'expense', 'category': 'bills', 'amount': 8000.0, 'note': 'electricity bill August'}
+2025-09-26 10:42:55,352 - INFO - {'id': 8, 'date': datetime.date(2025, 9, 11), 'type': 'income', 'category': 'investment', 'amount': 2000.0, 'note': 'fixed opportunity income monthly interest'}
+2025-09-26 10:42:55,352 - INFO - {'id': 3, 'date': datetime.date(2025, 9, 1), 'type': 'expense', 'category': 'educational', 'amount': 2200.0, 'note': 'official chess tshirt 2025/26'}
+2025-09-26 10:59:48,585 - INFO - Transparency sample logged:
+2025-09-26 10:59:48,587 - INFO - {'id': 26, 'date': datetime.date(2025, 9, 25), 'type': 'expense', 'category': 'Entertainment', 'amount': 1500.0, 'note': 'barista coffee chicken loaded fries'}
+2025-09-26 10:59:48,588 - INFO - {'id': 3, 'date': datetime.date(2025, 9, 1), 'type': 'expense', 'category': 'educational', 'amount': 2200.0, 'note': 'official chess tshirt 2025/26'}
+2025-09-26 10:59:48,588 - INFO - {'id': 7, 'date': datetime.date(2025, 9, 1), 'type': 'expense', 'category': 'shopping', 'amount': 6000.0, 'note': 'new semester clothes'}
+2025-09-26 11:05:58,095 - INFO - Transparency sample logged:
+2025-09-26 11:05:58,096 - INFO - {'id': 5, 'date': datetime.date(2025, 9, 6), 'type': 'expense', 'category': 'food', 'amount': 5000.0, 'note': 'birthday pizza large'}
+2025-09-26 11:05:58,096 - INFO - {'id': 26, 'date': datetime.date(2025, 9, 25), 'type': 'expense', 'category': 'Entertainment', 'amount': 1500.0, 'note': 'barista coffee chicken loaded fries'}
+2025-09-26 11:05:58,123 - INFO - {'id': 2, 'date': datetime.date(2025, 9, 1), 'type': 'income', 'category': 'salary', 'amount': 50000.0, 'note': 'bonus added'}
+2025-09-26 11:16:47,387 - INFO - Transparency sample logged:
+2025-09-26 11:16:47,388 - INFO - {'id': 2, 'date': datetime.date(2025, 9, 1), 'type': 'income', 'category': 'salary', 'amount': 50000.0, 'note': 'bonus added'}
+2025-09-26 11:16:47,388 - INFO - {'id': 7, 'date': datetime.date(2025, 9, 1), 'type': 'expense', 'category': 'shopping', 'amount': 6000.0, 'note': 'new semester clothes'}
+2025-09-26 11:16:47,391 - INFO - {'id': 16, 'date': datetime.date(2025, 9, 6), 'type': 'expense', 'category': 'sports', 'amount': 3000.0, 'note': 'chess tournament registration fee'}
+2025-09-26 11:21:09,610 - INFO - Transparency sample logged:
+2025-09-26 11:21:09,620 - INFO - {'id': 4, 'date': datetime.date(2025, 9, 3), 'type': 'expense', 'category': 'transport', 'amount': 1000.0, 'note': 'total bus fare 5 days'}
+2025-09-26 11:21:09,621 - INFO - {'id': 16, 'date': datetime.date(2025, 9, 6), 'type': 'expense', 'category': 'sports', 'amount': 3000.0, 'note': 'chess tournament registration fee'}
+2025-09-26 11:21:09,621 - INFO - {'id': 8, 'date': datetime.date(2025, 9, 11), 'type': 'income', 'category': 'investment', 'amount': 2000.0, 'note': 'fixed opportunity income monthly interest'}
+2025-09-26 11:23:12,808 - INFO - Transparency sample logged:
+2025-09-26 11:23:12,813 - INFO - {'id': 16, 'date': datetime.date(2025, 9, 6), 'type': 'expense', 'category': 'sports', 'amount': 3000.0, 'note': 'chess tournament registration fee'}
+2025-09-26 11:23:12,813 - INFO - {'id': 21, 'date': datetime.date(2025, 9, 25), 'type': 'expense', 'category': 'transport', 'amount': 440.0, 'note': 'bus and three wheel fare'}
+2025-09-26 11:23:12,813 - INFO - {'id': 4, 'date': datetime.date(2025, 9, 3), 'type': 'expense', 'category': 'transport', 'amount': 1000.0, 'note': 'total bus fare 5 days'}
+2025-09-26 11:58:25,272 - INFO - Transparency sample logged:
+2025-09-26 11:58:25,272 - INFO - {'id': 17, 'date': datetime.date(2025, 9, 16), 'type': 'expense', 'category': 'education', 'amount': 5000.0, 'note': 'robotic exhibition'}
+2025-09-26 11:58:25,273 - INFO - {'id': 2, 'date': datetime.date(2025, 9, 1), 'type': 'income', 'category': 'salary', 'amount': 50000.0, 'note': 'bonus added'}
+2025-09-26 11:58:25,273 - INFO - {'id': 16, 'date': datetime.date(2025, 9, 6), 'type': 'expense', 'category': 'sports', 'amount': 3000.0, 'note': 'chess tournament registration fee'}
+2025-09-26 12:01:28,990 - INFO - Transparency sample logged:
+2025-09-26 12:01:29,035 - INFO - {'id': 9, 'date': datetime.date(2025, 9, 1), 'type': 'expense', 'category': 'bills', 'amount': 6000.0, 'note': 'water bill August'}
+2025-09-26 12:01:29,036 - INFO - {'id': 26, 'date': datetime.date(2025, 9, 25), 'type': 'expense', 'category': 'Entertainment', 'amount': 1500.0, 'note': 'barista coffee chicken loaded fries'}
+2025-09-26 12:01:29,036 - INFO - {'id': 2, 'date': datetime.date(2025, 9, 1), 'type': 'income', 'category': 'salary', 'amount': 50000.0, 'note': 'bonus added'}
+=======
 2025-09-26 06:29:55,415 - INFO - Transparency sample logged:
 2025-09-26 06:29:55,435 - INFO - {'id': 17, 'date': datetime.date(2025, 9, 16), 'type': 'expense', 'category': 'education', 'amount': 5000.0, 'note': 'robotic exhibition'}
 2025-09-26 06:29:55,435 - INFO - {'id': 5, 'date': datetime.date(2025, 9, 6), 'type': 'expense', 'category': 'food', 'amount': 5000.0, 'note': 'birthday pizza large'}
@@ -249,6 +299,9 @@
 2025-09-26 12:17:21,164 - INFO - {'id': 55, 'date': datetime.date(2025, 9, 29), 'type': 'expense', 'category': 'Rent', 'amount': 390000.0, 'note': 'semester payment'}
 2025-09-26 12:17:21,164 - INFO - {'id': 47, 'date': datetime.date(2025, 9, 10), 'type': 'expense', 'category': 'bills', 'amount': 5000.0, 'note': 'electricity and water bills'}
 2025-09-26 12:17:21,165 - INFO - {'id': 2, 'date': datetime.date(2025, 9, 1), 'type': 'income', 'category': 'salary', 'amount': 50000.0, 'note': 'bonus added'}
+<<<<<<< HEAD
+>>>>>>> main
+=======
 2025-09-26 12:44:24,246 - INFO - Transparency sample logged:
 2025-09-26 12:44:24,247 - INFO - {'id': 8, 'date': datetime.date(2025, 9, 11), 'type': 'income', 'category': 'investment', 'amount': 2000.0, 'note': 'fixed opportunity income monthly interest'}
 2025-09-26 12:44:24,247 - INFO - {'id': 9, 'date': datetime.date(2025, 9, 1), 'type': 'expense', 'category': 'bills', 'amount': 6000.0, 'note': 'water bill August'}
@@ -261,3 +314,20 @@
 2025-09-26 13:15:39,351 - INFO - {'id': 39, 'date': datetime.date(2025, 10, 16), 'type': 'expense', 'category': 'Entertainment', 'amount': 10000.0, 'note': 'online booking - plane'}
 2025-09-26 13:15:39,351 - INFO - {'id': 28, 'date': datetime.date(2025, 9, 26), 'type': 'income', 'category': 'Freelance', 'amount': 100000.0, 'note': 'bonus + freelance '}
 2025-09-26 13:15:39,351 - INFO - {'id': 54, 'date': datetime.date(2025, 10, 11), 'type': 'expense', 'category': 'health', 'amount': 5000.0, 'note': 'medical expense'}
+>>>>>>> 743117cbd86b677559312175175d9c71e917ba0d
+2025-09-26 13:25:38,568 - INFO - Transparency sample logged:
+2025-09-26 13:25:38,569 - INFO - {'id': 6, 'date': datetime.date(2025, 9, 1), 'type': 'expense', 'category': 'bills', 'amount': 8000.0, 'note': 'electricity bill August'}
+2025-09-26 13:25:38,570 - INFO - {'id': 65, 'date': datetime.date(2025, 9, 26), 'type': 'expense', 'category': 'Entertainment', 'amount': 8000.0, 'note': 'pet shopping'}
+2025-09-26 13:25:38,571 - INFO - {'id': 62, 'date': datetime.date(2025, 9, 26), 'type': 'income', 'category': 'Entertainment', 'amount': 10000.0, 'note': 'mobile data and internet bills'}
+2025-09-26 13:31:42,690 - INFO - Transparency sample logged:
+2025-09-26 13:31:42,702 - INFO - {'id': 45, 'date': datetime.date(2025, 9, 26), 'type': 'expense', 'category': 'Entertainment', 'amount': 2000.0, 'note': 'pizza takeway'}
+2025-09-26 13:31:42,703 - INFO - {'id': 7, 'date': datetime.date(2025, 9, 1), 'type': 'expense', 'category': 'shopping', 'amount': 6000.0, 'note': 'new semester clothes'}
+2025-09-26 13:31:42,703 - INFO - {'id': 51, 'date': datetime.date(2025, 9, 29), 'type': 'expense', 'category': 'food', 'amount': 5000.0, 'note': 'restaurant dining'}
+2025-09-26 13:39:22,475 - INFO - Transparency sample logged:
+2025-09-26 13:39:22,475 - INFO - {'id': 47, 'date': datetime.date(2025, 9, 10), 'type': 'expense', 'category': 'bills', 'amount': 5000.0, 'note': 'electricity and water bills'}
+2025-09-26 13:39:22,476 - INFO - {'id': 61, 'date': datetime.date(2025, 9, 26), 'type': 'expense', 'category': 'Entertainment', 'amount': 1000.0, 'note': 'transport'}
+2025-09-26 13:39:22,476 - INFO - {'id': 53, 'date': datetime.date(2025, 10, 11), 'type': 'expense', 'category': 'sports', 'amount': 1000.0, 'note': 'training camp - sports unit'}
+2025-09-26 13:41:36,098 - INFO - Transparency sample logged:
+2025-09-26 13:41:36,098 - INFO - {'id': 28, 'date': datetime.date(2025, 9, 26), 'type': 'income', 'category': 'Freelance', 'amount': 100000.0, 'note': 'bonus + freelance '}
+2025-09-26 13:41:36,098 - INFO - {'id': 34, 'date': datetime.date(2025, 10, 22), 'type': 'expense', 'category': 'Entertainment', 'amount': 5000.0, 'note': 'dental'}
+2025-09-26 13:41:36,099 - INFO - {'id': 26, 'date': datetime.date(2025, 9, 25), 'type': 'expense', 'category': 'Entertainment', 'amount': 1500.0, 'note': 'barista coffee chicken loaded fries'}

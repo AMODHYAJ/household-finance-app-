@@ -971,7 +971,7 @@ def insights_page():
         if rai_msg:
             st.caption(f"Responsible AI: {rai_msg}")
 
-        # Show top categories (NEW from insight branch)
+        # Show top categories
         df = data_agent.get_transactions_df()
         if df is not None and not df.empty and "category" in df.columns:
             st.markdown("**Top Expense Categories:**")
@@ -995,15 +995,19 @@ def insights_page():
         st.write(f"**Last Month's Spending:** ${forecast.get('last_month', 0):,.2f}")
         st.write(f"**Forecast Next Month:** ${forecast.get('forecast_next_month', 0):,.2f}")
 
-    # --- Goal Tracking (ENHANCED from insight branch) ---
+    # --- Goal Tracking ---
     st.subheader("🎯 Goal Tracking")
     goal = insights.get("goal", "")
     if goal:
         st.write(goal)
-        # Progress bar for savings vs. goal (NEW from insight branch)
+        # Progress bar for savings vs. goal
         savings = stats.get("savings", 0)
         savings_goal = agent.savings_target if hasattr(agent, "savings_target") else 5000
-        progress = min(max(savings / savings_goal, 0), 1) if savings_goal > 0 else 0
+        if savings_goal > 0:
+            progress = float(savings) / float(savings_goal)
+            progress = max(0.0, min(progress, 1.0))  # Clamp between 0.0 and 1.0
+        else:
+            progress = 0.0
         st.progress(progress, text=f"Savings Progress: ${savings:,.2f} / ${savings_goal:,.2f}")
     else:
         st.info("No savings goal data available.")
@@ -1017,7 +1021,7 @@ def insights_page():
     else:
         st.success("No alerts at this time.")
 
-    # --- Anomalies (ENHANCED from insight branch) ---
+    # --- Anomalies ---
     st.subheader("🔎 Anomaly Detection")
     anomaly_msgs = insights.get("anomaly_messages", [])
     anomalies = insights.get("anomalies", None)
@@ -1027,7 +1031,7 @@ def insights_page():
         rai_msg = get_rai_message(["sensitive"])
         if rai_msg:
             st.caption(f"Responsible AI: {rai_msg}")
-        # Show anomaly table if available (NEW from insight branch)
+        # Show anomaly table if available
         if anomalies is not None and not anomalies.empty:
             st.markdown("**Anomalous Transactions:**")
             st.dataframe(anomalies)
@@ -1043,7 +1047,7 @@ def insights_page():
     else:
         st.info("No budget recommendations available.")
 
-    # --- Data Coverage (NEW from insight branch) ---
+    # --- Data Coverage ---
     st.subheader("📅 Data Coverage")
     df = data_agent.get_transactions_df()
     if df is not None and not df.empty and "date" in df.columns:
@@ -1053,7 +1057,7 @@ def insights_page():
         st.write(f"Total records: {len(df)}")
         st.write(f"Categories used: {df['category'].nunique() if 'category' in df.columns else 0}")
 
-    # --- Show any remaining RAI notes not already shown (NEW from insight branch) ---
+    # --- Show any remaining RAI notes not already shown ---
     shown = [
         get_rai_message(["category"]),
         get_rai_message(["transparency"]),
