@@ -242,14 +242,17 @@ class InsightGeneratorAgent:
             recs.append("Add some transactions to receive personalized budget recommendations.")
             return recs
 
-        if len(df) < 3:
+        # If fewer than 10 records, give simple, actionable advice
+        if len(df) < 10:
             recs.append("Track a few more transactions for tailored budget advice.")
             recs.append("Tip: Categorize your expenses to see where your money goes.")
             if "amount" in df.columns:
                 avg = df["amount"].mean()
                 recs.append(f"Your average transaction so far is ${avg:.2f}.")
+            # You can add more simple tips here
             return recs
 
+        # Otherwise, use your advanced logic/model
         try:
             recs = self.budget_recommender.recommend(df)
             if not recs:

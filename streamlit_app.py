@@ -789,16 +789,23 @@ def charts_page():
     else:
         st.info("No data available for charts. Add some transactions first!")
 
-import streamlit as st
-from agents.insight_generator import InsightGeneratorAgent
-
 def insights_page():
+    import streamlit as st
+    from agents.insight_generator import InsightGeneratorAgent
+
     st.title("💡 Financial Insights Dashboard")
 
-    # Access data_agent from session state
     data_agent = st.session_state.architect_agent.data_agent
     agent = InsightGeneratorAgent(data_agent=data_agent)
     insights = agent.generate_all()
+    rai = insights.get("responsible_ai", [])
+
+    def get_rai_message(keywords):
+        for msg in rai:
+            for keyword in keywords:
+                if keyword.lower() in msg.lower():
+                    return msg
+        return None
 
     # --- Summary Section ---
     st.subheader("📊 Summary Statistics")
@@ -809,6 +816,18 @@ def insights_page():
         col2.metric("Expense", f"${stats.get('expense', 0):,.2f}")
         col3.metric("Savings", f"${stats.get('savings', 0):,.2f}")
         col4.metric("Savings Rate", f"{stats.get('savings_rate', 0):.1f}%")
+        rai_msg = get_rai_message(["category"])
+        if rai_msg:
+            st.caption(f"Responsible AI: {rai_msg}")
+
+        # Show top categories
+        df = data_agent.get_transactions_df()
+        if df is not None and not df.empty and "category" in df.columns:
+            st.markdown("**Top Expense Categories:**")
+            top_cats = df[df["type"]=="expense"].groupby("category")["amount"].sum().sort_values(ascending=False).head(3)
+            for cat, amt in top_cats.items():
+                st.write(f"- {cat}: ${amt:,.2f}")
+
     else:
         st.info("No summary statistics available.")
 
@@ -818,6 +837,9 @@ def insights_page():
     forecast = insights.get("forecast", {})
     if trend:
         st.write(trend)
+        rai_msg = get_rai_message(["transparency"])
+        if rai_msg:
+            st.caption(f"Responsible AI: {rai_msg}")
     if forecast:
         st.write(f"**Last Month's Spending:** ${forecast.get('last_month', 0):,.2f}")
         st.write(f"**Forecast Next Month:** ${forecast.get('forecast_next_month', 0):,.2f}")
@@ -827,6 +849,13 @@ def insights_page():
     goal = insights.get("goal", "")
     if goal:
         st.write(goal)
+        # Progress bar for savings vs. goal
+        savings = stats.get("savings", 0)
+        savings_goal = agent.savings_target if hasattr(agent, "savings_target") else 5000
+        progress = min(max(savings / savings_goal, 0), 1) if savings_goal > 0 else 0
+        st.progress(progress, text=f"Savings Progress: ${savings:,.2f} / ${savings_goal:,.2f}")
+    else:
+        st.info("No savings goal data available.")
 
     # --- Alerts ---
     st.subheader("🚨 Alerts")
@@ -840,9 +869,17 @@ def insights_page():
     # --- Anomalies ---
     st.subheader("🔎 Anomaly Detection")
     anomaly_msgs = insights.get("anomaly_messages", [])
+    anomalies = insights.get("anomalies", None)
     if anomaly_msgs:
         for msg in anomaly_msgs:
             st.error(msg)
+        rai_msg = get_rai_message(["sensitive"])
+        if rai_msg:
+            st.caption(f"Responsible AI: {rai_msg}")
+        # Show anomaly table if available
+        if anomalies is not None and not anomalies.empty:
+            st.markdown("**Anomalous Transactions:**")
+            st.dataframe(anomalies)
     else:
         st.success("No anomalies detected.")
 
@@ -855,15 +892,26 @@ def insights_page():
     else:
         st.info("No budget recommendations available.")
 
-    # --- Responsible AI ---
-    st.subheader("🤖 Responsible AI Checks")
-    ai_checks = insights.get("responsible_ai", [])
-    for check in ai_checks:
-        if "⚠️" in check:
-            st.warning(check)
-        else:
-            st.success(check)
-            
+    # --- Data Coverage ---
+    st.subheader("📅 Data Coverage")
+    df = data_agent.get_transactions_df()
+    if df is not None and not df.empty and "date" in df.columns:
+        min_date = df["date"].min()
+        max_date = df["date"].max()
+        st.write(f"Data from **{min_date}** to **{max_date}**")
+        st.write(f"Total records: {len(df)}")
+        st.write(f"Categories used: {df['category'].nunique() if 'category' in df.columns else 0}")
+
+    # --- Show any remaining RAI notes not already shown ---
+    shown = [
+        get_rai_message(["category"]),
+        get_rai_message(["transparency"]),
+        get_rai_message(["sensitive"])
+    ]
+    for msg in rai:
+        if msg and msg not in shown:
+            st.caption(f"Responsible AI: {msg}")
+
 def logout():
     # Log the logout event
     if 'user_event_log' not in st.session_state:
