@@ -1,3 +1,13 @@
+"""
+Responsible AI & Commercialization (Template)
+------------------------------------------------
+* Fairness: Visualizes all relevant data, no distortion.
+* Transparency: Captions and explanations for each chart.
+* Explainability: Users understand what each chart shows.
+* Data Protection: Only visualizes non-sensitive, aggregated data.
+* Accessibility: Colorblind-friendly palettes, alt text for charts.
+* Commercialization: Branded reports, embeddable charts, accessibility as premium.
+"""
 import os
 import pandas as pd
 import plotly.express as px
@@ -9,7 +19,7 @@ from sklearn.linear_model import LinearRegression
 import warnings
 warnings.filterwarnings('ignore')
 
-CHART_DIR = "visualizations/static_charts"  # Temporary hardcoded value
+CHART_DIR = "visualizations/static_charts"
 
 class ChartCreatorAgent:
     def __init__(self, data_agent):
@@ -91,25 +101,6 @@ class ChartCreatorAgent:
             insights=self._get_savings_insights(monthly_totals)
         )
         return self._finalize_chart(fig, "savings_over_time", save, caption)
-
-    # Automatic Chart Selection
-    def auto_chart_selection(self, x_col, y_col, save=True, show=False):
-        """Automatically select the best chart type based on data characteristics"""
-        df = self.data_agent.get_transactions_df()
-        if df is None or df.empty:
-            return self._create_empty_chart("No data available for automatic chart selection")
-        
-        # Determine chart type based on data characteristics
-        if self._is_time_series(x_col, df):
-            return self._create_time_series_chart(df, x_col, y_col, save)
-        elif self._is_categorical_numeric(x_col, y_col, df):
-            return self._create_bar_chart(df, x_col, y_col, save)
-        elif self._is_two_numeric(x_col, y_col, df):
-            return self._create_scatter_plot(df, x_col, y_col, save)
-        elif self._is_single_numeric(y_col, df):
-            return self._create_histogram(df, y_col, save)
-        else:
-            return self._create_bar_chart(df, x_col, y_col, save)
 
     # Advanced Features
     def create_interactive_dashboard(self, filters=None):
@@ -259,103 +250,6 @@ class ChartCreatorAgent:
         fig.update_layout(title=f"Financial Projections (Next {periods} Months)")
         return fig
 
-    def _create_time_based_chart(self, query):
-        """Generate a time-based chart (e.g., line chart) based on natural language query"""
-        df = self.data_agent.get_transactions_df()
-        if df is None or df.empty:
-            return self._create_empty_chart("No data available for time-based chart")
-
-        # Parse time range from query
-        time_range = None
-        if 'last 3 months' in query or 'last quarter' in query:
-            time_range = 'last_3_months'
-        elif 'last 6 months' in query:
-            time_range = 'last_6_months'
-        elif 'this year' in query:
-            time_range = 'this_year'
-        elif 'last month' in query:
-            time_range = 'last_month'
-        else:
-            time_range = 'all'
-
-        # Filter data based on time range
-        df_copy = self._get_filtered_data(time_range) if time_range != 'last_month' else self._filter_by_period(df.copy(), 'last_month')
-
-        if df_copy.empty:
-            return self._create_empty_chart("No data available for the specified time range")
-
-        # Determine chart focus (e.g., expenses, income, or savings)
-        if any(word in query for word in ['expense', 'expenses']):
-            df_focus = df_copy[df_copy['type'] == 'expense'].groupby('date')['amount'].sum().reset_index()
-            chart_type = "expenses"
-        elif any(word in query for word in ['income']):
-            df_focus = df_copy[df_copy['type'] == 'income'].groupby('date')['amount'].sum().reset_index()
-            chart_type = "income"
-        else:
-            # Default to savings-like trend if no specific type is mentioned
-            df_copy['date'] = pd.to_datetime(df_copy['date'])
-            df_copy['month'] = df_copy['date'].dt.to_period('M').astype(str)
-            monthly_totals = df_copy.groupby(['month', 'type'])['amount'].sum().unstack(fill_value=0)
-            df_focus = pd.DataFrame({'date': monthly_totals.index, 'savings': monthly_totals.get('income', 0) - monthly_totals.get('expense', 0)})
-            chart_type = "savings"
-
-        # Create a line chart for the time-based data
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(x=df_focus['date'], y=df_focus['amount'] if 'amount' in df_focus else df_focus['savings'],
-                               mode='lines+markers', name=f"{chart_type.title()} Trend",
-                               line=dict(color='blue' if chart_type == 'savings' else 'green' if chart_type == 'income' else 'red')))
-
-        fig.update_layout(title=f"{chart_type.title()} Trend Over Time ({time_range.replace('_', ' ').title() if time_range else 'All Data'})",
-                         xaxis_title="Date",
-                         yaxis_title="Amount")
-
-        # Generate caption
-        caption = self._generate_caption(
-            chart_type="line",
-            comparison=f"{chart_type} trends over the selected time period",
-            reasoning="Line charts are ideal for visualizing trends over time",
-            insights=f"The {chart_type} trend shows {'growth' if (df_focus['amount'].iloc[-1] > df_focus['amount'].iloc[0] if 'amount' in df_focus else df_focus['savings'].iloc[-1] > df_focus['savings'].iloc[0]) else 'decline' if (df_focus['amount'].iloc[-1] < df_focus['amount'].iloc[0] if 'amount' in df_focus else df_focus['savings'].iloc[-1] < df_focus['savings'].iloc[0]) else 'stability'} over time."
-        )
-
-        return self._finalize_chart(fig, f"time_based_{chart_type}", save=False, caption=caption)
-
-    def _create_utility_chart(self, query):
-        """Generate a chart focused on utility-related expenses (e.g., electricity, bills)"""
-        df = self.data_agent.get_transactions_df()
-        if df is None or df.empty:
-            return self._create_empty_chart("No data available for utility chart")
-
-        # Filter for utility-related categories, handling NaN without na parameter
-        df_copy = df.copy()
-        df_copy['category'] = df_copy['category'].fillna('')
-        utility_df = df_copy[df_copy['category'].str.lower().isin(['electricity', 'utility', 'bill'])]
-
-        if utility_df.empty:
-            return self._create_empty_chart("No utility-related data available")
-
-        # Aggregate by date for a time-based view
-        utility_df['date'] = pd.to_datetime(utility_df['date'])
-        utility_totals = utility_df.groupby('date')['amount'].sum().reset_index()
-
-        # Create a line chart for utility expenses over time
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(x=utility_totals['date'], y=utility_totals['amount'],
-                               mode='lines+markers', name='Utility Expenses',
-                               line=dict(color='orange')))
-
-        fig.update_layout(title="Utility Expenses Over Time",
-                         xaxis_title="Date",
-                         yaxis_title="Amount")
-
-        caption = self._generate_caption(
-            chart_type="line",
-            comparison="utility expenses over time",
-            reasoning="Line charts are suitable for tracking expense trends",
-            insights="Utility costs show fluctuations that may correlate with usage patterns."
-        )
-
-        return self._finalize_chart(fig, "utility_expenses", save=False, caption=caption)
-
     # Helper Methods
     def _get_filtered_data(self, time_range=None):
         """Get filtered data based on time range"""
@@ -450,51 +344,16 @@ class ChartCreatorAgent:
         
         return f"Current savings: ${current_savings:.2f}, average monthly savings: ${avg_monthly_savings:.2f}"
 
-    # Automatic chart selection helpers
-    def _is_time_series(self, col, df):
-        return pd.api.types.is_datetime64_any_dtype(df[col]) if col in df.columns else False
-
-    def _is_categorical_numeric(self, x_col, y_col, df):
-        return (x_col in df.columns and y_col in df.columns and 
-                not pd.api.types.is_numeric_dtype(df[x_col]) and 
-                pd.api.types.is_numeric_dtype(df[y_col]))
-
-    def _is_two_numeric(self, x_col, y_col, df):
-        return (x_col in df.columns and y_col in df.columns and 
-                pd.api.types.is_numeric_dtype(df[x_col]) and 
-                pd.api.types.is_numeric_dtype(df[y_col]))
-
-    def _is_single_numeric(self, col, df):
-        return col in df.columns and pd.api.types.is_numeric_dtype(df[col])
-
-    def _create_time_series_chart(self, df, x_col, y_col, save):
-        fig = px.line(df, x=x_col, y=y_col, title=f"{y_col} over Time")
-        return self._finalize_chart(fig, "time_series", save, "Time series analysis")
-
-    def _create_bar_chart(self, df, x_col, y_col, save):
-        fig = px.bar(df, x=x_col, y=y_col, title=f"{y_col} by {x_col}")
-        return self._finalize_chart(fig, "bar_chart", save, "Categorical comparison")
-
-    def _create_scatter_plot(self, df, x_col, y_col, save):
-        fig = px.scatter(df, x=x_col, y=y_col, title=f"{y_col} vs {x_col}")
-        return self._finalize_chart(fig, "scatter_plot", save, "Numeric relationship")
-
-    def _create_histogram(self, df, col, save):
-        fig = px.histogram(df, x=col, title=f"Distribution of {col}")
-        return self._finalize_chart(fig, "histogram", save, "Data distribution")
-
     def _apply_filters(self, df, filters):
         """Apply filters to dataframe"""
         df_copy = df.copy()
         if 'category' in filters and filters['category']:
-            # Handle NaN values explicitly and remove na parameter
             df_copy['category'] = df_copy['category'].fillna('')
             df_copy = df_copy[df_copy['category'].isin(filters['category'])]
         if 'date_range' in filters and filters['date_range']:
             start_date, end_date = filters['date_range']
             df_copy = df_copy[(df_copy['date'] >= start_date) & (df_copy['date'] <= end_date)]
         if 'type' in filters and filters['type']:
-            # Handle NaN values explicitly and remove na parameter
             df_copy['type'] = df_copy['type'].fillna('')
             df_copy = df_copy[df_copy['type'].isin(filters['type'])]
         return df_copy
@@ -527,3 +386,8 @@ class ChartCreatorAgent:
             future_date = last_date + pd.DateOffset(months=i)
             future_months.append(future_date.strftime('%Y-%m'))
         return future_months
+
+    # Backward compatibility - keep the old method names
+    def line_monthly_expense_trend(self, save=True, show=False):
+        """Backward compatibility - redirect to savings over time"""
+        return self.line_savings_over_time(save=save, show=show)
