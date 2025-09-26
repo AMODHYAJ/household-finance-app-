@@ -1003,7 +1003,11 @@ def insights_page():
         # Progress bar for savings vs. goal
         savings = stats.get("savings", 0)
         savings_goal = agent.savings_target if hasattr(agent, "savings_target") else 5000
-        progress = min(max(savings / savings_goal, 0), 1) if savings_goal > 0 else 0
+        if savings_goal > 0:
+            progress = float(savings) / float(savings_goal)
+            progress = max(0.0, min(progress, 1.0))  # Clamp between 0.0 and 1.0
+        else:
+            progress = 0.0
         st.progress(progress, text=f"Savings Progress: ${savings:,.2f} / ${savings_goal:,.2f}")
     else:
         st.info("No savings goal data available.")
