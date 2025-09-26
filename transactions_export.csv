@@ -16,5 +16,48 @@ id,user_id,type,category,amount,date,note
 17,2,expense,education,5000.0,2025-09-16,robotic exhibition
 18,2,expense,food,5000.0,2025-09-25,taco bell - classic burrito
 19,6,income,salary,15000.0,2025-09-25,lolc intern
-20,8,expense,food,2500.0,2025-09-25,burger and milo
 21,2,expense,transport,440.0,2025-09-25,bus and three wheel fare
+22,10,expense,food,550.0,2025-09-25,chicken bucket 6 pieces
+23,10,expense,bills,1000.0,2025-09-25,printouts
+24,2,expense,education,1000.0,2025-09-27,research printouts
+25,2,expense,Entertainment,4000.0,2025-09-28,shopping mid
+26,2,expense,Entertainment,1500.0,2025-09-25,barista coffee chicken loaded fries
+27,2,expense,Entertainment,64000.0,2025-09-26,41 chess t-shirts cost
+28,2,income,Freelance,100000.0,2025-09-26,bonus + freelance 
+29,2,income,Salary,5000.0,2025-09-26,monthly shares of CAL
+30,2,expense,Entertainment,300.0,2025-10-03,breakfast - veg roll and milo
+31,2,expense,Entertainment,15000.0,2025-10-10,grocery shopping 
+32,2,expense,Entertainment,8000.0,2025-10-09,electricity bill
+33,2,expense,Transport,165.0,2025-10-14,bus fare
+34,2,expense,Entertainment,5000.0,2025-10-22,dental
+35,2,expense,Entertainment,5000.0,2025-10-16,netflix subscription
+36,2,expense,Entertainment,8000.0,2025-10-16,mortgage per month
+37,2,expense,Rent,8000.0,2025-10-16,house rent
+38,2,expense,Entertainment,1000.0,2025-10-16,hotel accomodation
+39,2,expense,Entertainment,10000.0,2025-10-16,online booking - plane
+40,2,income,Salary,50000.0,2025-09-29,blogger salary
+41,2,income,Entertainment,100000.0,2025-09-29,youtuber
+42,2,expense,Entertainment,50000.0,2025-09-26,buying car
+43,2,expense,Entertainment,3999.99,2025-09-30,Education textbooks
+44,2,expense,Transport,900.0,2025-09-26,bus and threewheel fare
+45,2,expense,Entertainment,2000.0,2025-09-26,pizza takeway
+46,2,expense,Entertainment,4000.0,2025-09-26,car insurance
+47,2,expense,bills,5000.0,2025-09-10,electricity and water bills
+48,2,expense,sports,3000.0,2025-09-10,chess tournament registration fee
+49,2,expense,education,2000.0,2025-09-12,education  lecture printouts
+50,2,expense,Entertainment,3500.0,2025-09-26,high tea buffet
+51,2,expense,food,5000.0,2025-09-29,restaurant dining
+52,2,expense,Entertainment,750.0,2025-10-09,museum education trip 
+53,2,expense,sports,1000.0,2025-10-11,training camp - sports unit
+54,2,expense,health,5000.0,2025-10-11,medical expense
+55,2,expense,Rent,390000.0,2025-09-29,semester payment
+56,2,expense,Rent,390000.0,2025-09-29,semester payment - education
+57,2,expense,Transport,7000.0,2025-09-29,rented bus fare
+58,2,income,Salary,200000.0,2025-09-26,salary
+59,2,expense,Entertainment,20000.0,2025-09-26,grocery shopping
+60,2,expense,Entertainment,10000.0,2025-09-26,party food expense
+61,2,expense,Entertainment,1000.0,2025-09-26,transport
+62,2,income,Entertainment,10000.0,2025-09-26,mobile data and internet bills
+63,2,income,Freelance,400000.0,2025-09-26,freelance
+64,2,income,Salary,500000.0,2025-09-26,salary
+65,2,expense,Entertainment,8000.0,2025-09-26,pet shopping

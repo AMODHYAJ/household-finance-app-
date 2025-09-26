@@ -58,3 +58,16 @@ class CategoryClassifier:
 
         preds = self.pipeline.predict(X)
         return accuracy_score(y, preds)
+    
+def predict_top(self, note_text, top_n=3):
+    """Return top N predictions with confidence scores (vishmi branch feature)"""
+    if self.pipeline is None:
+        with open(self.model_path, "rb") as f:
+            self.pipeline = pickle.load(f)
+    
+    probabilities = self.pipeline.predict_proba([note_text])[0]
+    classes = self.pipeline.classes_
+    
+    # Get top N predictions
+    top_indices = probabilities.argsort()[-top_n:][::-1]
+    return [(classes[i], probabilities[i]) for i in top_indices]
