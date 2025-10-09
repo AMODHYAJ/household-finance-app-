@@ -545,10 +545,16 @@ class VisualQueryBuilder:
         """Get available categories from data"""
         try:
             df = self.data_agent.get_transactions_df()
-            if df is not None and 'category' in df.columns:
-                return sorted(df['category'].unique().tolist())
-            return []
-        except:
+            # Add better validation
+            if df is None or df.empty or not isinstance(df, pd.DataFrame):
+                return []
+            if 'category' not in df.columns:
+                return []
+            
+            categories = df['category'].dropna().unique().tolist()
+            return sorted([str(cat).strip() for cat in categories if str(cat).strip()])
+        except Exception as e:
+            print(f"⚠️ Category loading error: {e}")
             return []
     
     def validate_components(self, components: Dict[str, Any]) -> Tuple[bool, str]:
@@ -582,17 +588,19 @@ class EnhancedChartCreatorAgent:
         self.chart_descriptions = {}
     
     def visual_components_to_chart(self, components: Dict[str, Any]):
-        """Generate chart from visual query builder components"""
         try:
             print(f"🎨 Processing visual query: {components}")
             df = self.data_agent.get_transactions_df()
             
-            if df is None or df.empty:
-                return self._create_helpful_response(
-                    "No transaction data available", 
-                    "Please add some transactions first to generate charts.",
-                    self.get_query_suggestions()
-                )
+            # Better data validation
+            if df is None:
+                return self._create_helpful_response("Data Error", "Could not load transaction data")
+            if not isinstance(df, pd.DataFrame):
+                return self._create_helpful_response("Data Format Error", "Transaction data format is invalid")
+            if df.empty:
+                return self._create_helpful_response("No Data", "No transactions available")
+            
+            print(f"📊 Data shape: {df.shape}, columns: {df.columns.tolist()}")
             
             # Validate components
             is_valid, validation_msg = self.visual_query_builder.validate_components(components)
@@ -611,16 +619,18 @@ class EnhancedChartCreatorAgent:
             print(f"✅ Visual query built: {generated_query}")
             print(f"✅ Analysis: {analysis['primary_intent']}")
             
-            df_clean = self._clean_data(df)
-            if df_clean.empty:
+            # Apply visual filters first
+            filtered_df = self._apply_visual_filters(df, components)
+            
+            if filtered_df.empty:
                 return self._create_helpful_response(
-                    "No valid transaction data", 
-                    "The available transaction data appears to be invalid or corrupted.",
+                    "No data matching your criteria", 
+                    "No transactions found that match your selected filters.",
                     self.get_query_suggestions()
                 )
             
             # Generate the chart based on analysis
-            result = self._generate_chart_based_on_analysis(df_clean, analysis, generated_query)
+            result = self._generate_chart_based_on_analysis(filtered_df, analysis, generated_query)
             
             return result
             
@@ -646,6 +656,32 @@ class EnhancedChartCreatorAgent:
                 self.get_query_suggestions()
             )
         
+        # Apply specific category filter if requested - ROBUST FILTERING
+        requested_categories = analysis['entities']['categories']
+        if requested_categories and requested_categories != ["All Categories"]:
+            # Case-insensitive, trimmed comparison for each requested category
+            category_mask = False
+            for category in requested_categories:
+                category_lower = category.strip().lower()
+                category_mask |= (filtered_df['category'].astype(str).str.strip().str.lower() == category_lower)
+            filtered_df = filtered_df[category_mask]
+        
+        # Apply data focus filter
+        data_focus = analysis['data_focus']
+        if data_focus == 'income':
+            filtered_df = filtered_df[filtered_df['type'] == 'income']
+        elif data_focus == 'expense':
+            filtered_df = filtered_df[filtered_df['type'] == 'expense']
+        # 'both' and 'savings' keep all data
+        
+        if filtered_df.empty:
+            focus_name = analysis['data_focus'].replace('_', ' ').title()
+            return self._create_helpful_response(
+                f"No {focus_name} Data",
+                f"No {analysis['data_focus']} data found for the selected filters.",
+                self.get_query_suggestions()
+            )
+        
         # Add anomaly insights to regular charts if available
         insights = ""
         if analysis.get('primary_intent') in ['trend_analysis', 'comprehensive_dashboard']:
@@ -662,7 +698,8 @@ class EnhancedChartCreatorAgent:
             'category_analysis': self._create_category_analysis,
             'time_comparison': self._create_time_comparison,
             'trend_analysis': self._create_trend_analysis,
-            'anomaly_detection': self._create_anomaly_chart
+            'anomaly_detection': self._create_anomaly_chart,
+            'comprehensive_dashboard': self._create_comprehensive_dashboard
         }
         
         handler = intent_handlers.get(analysis['primary_intent'], self._create_comprehensive_dashboard)
@@ -866,7 +903,7 @@ class EnhancedChartCreatorAgent:
         return self._finalize_chart(fig, "savings_trend", True, caption)
 
     def _create_category_analysis(self, df: pd.DataFrame, analysis: Dict, query: str):
-        """Create category-specific analysis"""
+        """Create category-specific analysis - WITH ROBUST FILTERING"""
         requested_categories = analysis['entities']['categories']
         
         if not requested_categories:
@@ -877,8 +914,13 @@ class EnhancedChartCreatorAgent:
                 [f"Show {cat} expenses" for cat in available_cats[:3]]
             )
         
-        # Filter for requested categories
-        category_df = df[df['category'].isin(requested_categories)]
+        # Filter for requested categories with robust matching
+        category_mask = False
+        for category in requested_categories:
+            category_lower = category.strip().lower()
+            category_mask |= (df['category'].astype(str).str.strip().str.lower() == category_lower)
+        
+        category_df = df[category_mask]
         
         if category_df.empty:
             available_cats = df['category'].unique().tolist()
@@ -1224,6 +1266,50 @@ class EnhancedChartCreatorAgent:
                 marker_color='#3498db'
             ), 2, 2)
 
+    def _apply_visual_filters(self, df: pd.DataFrame, components: Dict) -> pd.DataFrame:
+        """Apply filters based on visual query components - WITH ROBUST CATEGORY FILTERING"""
+        if df is None or df.empty:
+            return pd.DataFrame()
+        
+        filtered_df = df.copy()
+        
+        # Apply chart focus filter
+        chart_focus = components.get('chart_focus', 'Expenses')
+        if chart_focus == 'Expenses':
+            filtered_df = filtered_df[filtered_df['type'] == 'expense']
+        elif chart_focus == 'Income':
+            filtered_df = filtered_df[filtered_df['type'] == 'income']
+        # For 'Savings' and 'Comparison', we keep both types
+        
+        # Apply time filter
+        time_period = components.get('time_period', 'All Time')
+        if time_period != "All Time":
+            # Convert visual time period to internal format
+            time_period_map = {
+                'This Month': 'this_month',
+                'Last Month': 'last_month',
+                'Last 3 Months': 'last_3_months',
+                'This Year': 'this_year'
+            }
+            internal_time_period = time_period_map.get(time_period, 'last_3_months')
+            filtered_df = self._apply_time_filter(filtered_df, internal_time_period)
+        
+        # Apply category filter - ROBUST FILTERING
+        specific_category = components.get('specific_category', 'All Categories')
+        if specific_category != "All Categories":
+            # Case-insensitive, trimmed comparison
+            filtered_df = filtered_df[
+                filtered_df['category'].astype(str).str.strip().str.lower() == 
+                specific_category.strip().lower()
+            ]
+        
+        # Apply amount filter
+        min_amount = components.get('min_amount', 0)
+        if min_amount > 0:
+            filtered_df = filtered_df[filtered_df['amount'] >= min_amount]
+        
+        return filtered_df        
+
     # [Include all other chart creation methods...]
     # _create_expense_breakdown, _create_comparison_chart, _create_savings_trend, etc.
 
@@ -1255,8 +1341,10 @@ class EnhancedChartCreatorAgent:
     def _apply_time_filter(self, df: pd.DataFrame, time_range: str) -> pd.DataFrame:
         """Apply time filter to dataframe"""
         df_copy = df.copy()
-        df_copy['date'] = pd.to_datetime(df_copy['date'], errors='coerce')
-        df_copy = df_copy.dropna(subset=['date'])
+        # Ensure date column is properly converted
+        if 'date' in df_copy.columns:
+            df_copy['date'] = pd.to_datetime(df_copy['date'], errors='coerce')
+            df_copy = df_copy.dropna(subset=['date'])
         
         now = datetime.now()
         if time_range == 'this_month':
@@ -1277,6 +1365,39 @@ class EnhancedChartCreatorAgent:
             return df_copy[df_copy['date'] >= cutoff]
         else:
             return df_copy
+        
+    def _apply_time_filter_to_df(self, df: pd.DataFrame, time_period: str) -> pd.DataFrame:
+        """Apply time filter to dataframe for visual query builder"""
+        df_copy = df.copy()
+        
+        # Ensure date column is properly converted
+        if 'date' in df_copy.columns:
+            df_copy['date'] = pd.to_datetime(df_copy['date'], errors='coerce')
+            df_copy = df_copy.dropna(subset=['date'])
+        
+        if df_copy.empty:
+            return df_copy
+        
+        now = datetime.now()
+        if time_period == 'This Month':
+            start_date = now.replace(day=1)
+            return df_copy[df_copy['date'] >= start_date]
+        elif time_period == 'Last Month':
+            first_day_this_month = now.replace(day=1)
+            last_day_last_month = first_day_this_month - timedelta(days=1)
+            first_day_last_month = last_day_last_month.replace(day=1)
+            return df_copy[
+                (df_copy['date'] >= first_day_last_month) & 
+                (df_copy['date'] <= last_day_last_month)
+            ]
+        elif time_period == 'Last 3 Months':
+            cutoff = now - timedelta(days=90)
+            return df_copy[df_copy['date'] >= cutoff]
+        elif time_period == 'This Year':
+            start_date = now.replace(month=1, day=1)
+            return df_copy[df_copy['date'] >= start_date]
+        else:  # All Time
+            return df_copy    
 
     def _generate_comprehensive_caption(self, query: str, analysis: Dict, insights: str, chart_type: str) -> Dict:
         """Generate comprehensive caption"""
@@ -1710,11 +1831,15 @@ class EnhancedChartCreatorAgent:
         return self.query_assistant.get_smart_suggestions(partial_query)
 
     def _apply_filters(self, df, filters):
-        """Apply filters to dataframe"""
+        """Apply filters to dataframe - WITH ROBUST CATEGORY FILTERING"""
         df_copy = df.copy()
 
         if 'category' in filters and filters['category']:
-            df_copy = df_copy[df_copy['category'].isin(filters['category'])]
+            # Convert both to lowercase for case-insensitive matching
+            filter_categories = [cat.strip().lower() for cat in filters['category']]
+            df_copy = df_copy[
+                df_copy['category'].astype(str).str.strip().str.lower().isin(filter_categories)
+            ]
 
         if 'type' in filters and filters['type']:
             df_copy = df_copy[df_copy['type'].isin(filters['type'])]
@@ -1796,3 +1921,5 @@ class ChartCreatorAgent:
 
     # [Keep all other existing methods for backward compatibility...]
     # natural_language_to_chart, predictive_charts, comparative_charts, etc.
+
+       
