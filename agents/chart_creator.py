@@ -1,6 +1,8 @@
 import os
 from dotenv import load_dotenv
 
+
+
 # Load environment variables from .env file at the module level
 load_dotenv()
 
@@ -433,7 +435,6 @@ class VisualQueryBuilder:
         self.data_agent = data_agent
         
     def build_query_from_components(self, components: Dict[str, Any]) -> Dict[str, Any]:
-        """Build a query dictionary from visual components"""
         try:
             query_parts = []
             
@@ -451,10 +452,13 @@ class VisualQueryBuilder:
             if detail_level != "Summary":
                 query_parts.append(detail_level.lower())
             
-            # Specific category
-            specific_category = components.get('specific_category', 'All Categories')
-            if specific_category != "All Categories":
-                query_parts.append(f"for {specific_category.lower()}")
+            # Specific categories - UPDATED FOR MULTI-SELECT
+            specific_categories = components.get('specific_categories', [])
+            if specific_categories:
+                if len(specific_categories) == 1:
+                    query_parts.append(f"for {specific_categories[0].lower()}")
+                else:
+                    query_parts.append(f"for {len(specific_categories)} categories")
             
             # Amount filter
             min_amount = components.get('min_amount', 0)
@@ -464,11 +468,11 @@ class VisualQueryBuilder:
             # Build the final query
             generated_query = " ".join(query_parts)
             
-            # Create analysis structure similar to NLP output
+            # Create analysis structure - UPDATED FOR MULTI-CATEGORY
             analysis = {
-                'primary_intent': self._map_focus_to_intent(chart_focus),
+                'primary_intent': self._map_focus_to_intent(chart_focus, detail_level),  # UPDATED
                 'entities': {
-                    'categories': [specific_category] if specific_category != "All Categories" else [],
+                    'categories': specific_categories,  # Now supports multiple
                     'time_periods': [time_period] if time_period != "All Time" else []
                 },
                 'time_context': {
@@ -477,7 +481,7 @@ class VisualQueryBuilder:
                 },
                 'data_focus': self._map_focus_to_data(chart_focus),
                 'chart_preference': self._map_detail_to_chart(detail_level, chart_focus),
-                'confidence_score': 1.0,  # Visual queries have highest confidence
+                'confidence_score': 1.0,
                 'reasoning': ['Query built from visual components'],
                 'is_follow_up': False
             }
@@ -499,15 +503,38 @@ class VisualQueryBuilder:
                 'components': components
             }
     
-    def _map_focus_to_intent(self, focus: str) -> str:
-        """Map visual focus to NLP intent"""
-        focus_map = {
-            'Expenses': 'expense_breakdown',
-            'Income': 'income_breakdown',
-            'Savings': 'savings_trend',
-            'Comparison': 'income_vs_expense'
+        
+    def _map_focus_to_intent(self, focus: str, detail_level: str) -> str:
+        """Map visual focus and detail level to appropriate NLP intent"""
+        
+        # Combine focus and detail level to create more specific intents
+        focus_detail_map = {
+            # Expenses with different detail levels
+            ('Expenses', 'Summary'): 'expense_breakdown',
+            ('Expenses', 'By Category'): 'expense_breakdown',
+            ('Expenses', 'Trend Over Time'): 'trend_analysis',
+            ('Expenses', 'Detailed Breakdown'): 'comprehensive_dashboard',
+            
+            # Income with different detail levels
+            ('Income', 'Summary'): 'income_breakdown',
+            ('Income', 'By Category'): 'income_breakdown',
+            ('Income', 'Trend Over Time'): 'trend_analysis',
+            ('Income', 'Detailed Breakdown'): 'comprehensive_dashboard',
+            
+            # Savings with different detail levels
+            ('Savings', 'Summary'): 'savings_trend',
+            ('Savings', 'By Category'): 'category_analysis',
+            ('Savings', 'Trend Over Time'): 'savings_trend',
+            ('Savings', 'Detailed Breakdown'): 'comprehensive_dashboard',
+            
+            # Comparison with different detail levels
+            ('Comparison', 'Summary'): 'income_vs_expense',
+            ('Comparison', 'By Category'): 'category_analysis',
+            ('Comparison', 'Trend Over Time'): 'trend_analysis',
+            ('Comparison', 'Detailed Breakdown'): 'comprehensive_dashboard',
         }
-        return focus_map.get(focus, 'comprehensive_dashboard')
+        
+        return focus_detail_map.get((focus, detail_level), 'comprehensive_dashboard')
     
     def _map_time_period(self, time_period: str) -> str:
         """Map time period to standard range"""
@@ -531,15 +558,25 @@ class VisualQueryBuilder:
         return focus_map.get(focus, 'both')
     
     def _map_detail_to_chart(self, detail: str, focus: str) -> str:
-        """Map detail level to chart type"""
+        """Map detail level to chart type with more specific logic"""
         if detail == "By Category":
-            return 'pie' if focus in ['Expenses', 'Income'] else 'bar'
+            if focus in ['Expenses', 'Income']:
+                return 'pie'
+            elif focus == 'Savings':
+                return 'bar'
+            else:  # Comparison
+                return 'bar'
         elif detail == "Trend Over Time":
             return 'line'
         elif detail == "Detailed Breakdown":
-            return 'bar'
+            return 'dashboard'  # Use dashboard for comprehensive views
         else:  # Summary
-            return 'bar' if focus == 'Comparison' else 'pie'
+            if focus == 'Comparison':
+                return 'bar'
+            elif focus == 'Savings':
+                return 'line'
+            else:  # Expenses, Income
+                return 'pie'
     
     def get_available_categories(self) -> List[str]:
         """Get available categories from data"""
@@ -611,11 +648,10 @@ class EnhancedChartCreatorAgent:
                     self.get_query_suggestions()
                 )
             
-            # Build query from components
+            # Build query from components - UPDATED FOR MULTI-CATEGORY
             query_result = self.visual_query_builder.build_query_from_components(components)
             generated_query = query_result['query']
             analysis = query_result['analysis']
-            
             print(f"✅ Visual query built: {generated_query}")
             print(f"✅ Analysis: {analysis['primary_intent']}")
             
@@ -643,7 +679,77 @@ class EnhancedChartCreatorAgent:
                 f"Chart generation error: {str(e)}",
                 self.get_query_suggestions()
             )
+    def _apply_visual_filters(self, df: pd.DataFrame, components: Dict) -> pd.DataFrame:
+        """Apply filters based on visual query components WITH MULTI-CATEGORY SUPPORT"""
+        if df is None or df.empty:
+            return pd.DataFrame()
+        
+        filtered_df = df.copy()
+        
+        # Apply chart focus filter
+        chart_focus = components.get('chart_focus', 'Expenses')
+        if chart_focus == 'Expenses':
+            filtered_df = filtered_df[filtered_df['type'] == 'expense']
+        elif chart_focus == 'Income':
+            filtered_df = filtered_df[filtered_df['type'] == 'income']
+        # For 'Savings' and 'Comparison', we keep both types
+        
+        # Apply time filter
+        time_period = components.get('time_period', 'All Time')
+        if time_period != "All Time":
+            filtered_df = self._apply_time_filter_to_df(filtered_df, time_period)
+        
+        # Apply category filter - MULTI-CATEGORY SUPPORT with "All Categories" option
+        specific_categories = components.get('specific_categories', [])
+        if specific_categories and "All Categories" not in specific_categories:
+            # Case-insensitive, trimmed comparison for multiple categories
+            category_mask = False
+            for category in specific_categories:
+                category_lower = category.strip().lower()
+                category_mask |= (filtered_df['category'].astype(str).str.strip().str.lower() == category_lower)
+            filtered_df = filtered_df[category_mask]
+        # If "All Categories" is selected, don't filter by category (show all)
+        
+        # Apply amount filter
+        min_amount = components.get('min_amount', 0)
+        if min_amount > 0:
+            filtered_df = filtered_df[filtered_df['amount'] >= min_amount]
+        
+        return filtered_df
 
+    def _apply_time_filter_to_df(self, df: pd.DataFrame, time_period: str) -> pd.DataFrame:
+        """Apply time filter to dataframe for visual query builder"""
+        df_copy = df.copy()
+        
+        # Ensure date column is properly converted
+        if 'date' in df_copy.columns:
+            df_copy['date'] = pd.to_datetime(df_copy['date'], errors='coerce')
+            df_copy = df_copy.dropna(subset=['date'])
+        
+        if df_copy.empty:
+            return df_copy
+        
+        now = datetime.now()
+        if time_period == 'This Month':
+            start_date = now.replace(day=1)
+            return df_copy[df_copy['date'] >= start_date]
+        elif time_period == 'Last Month':
+            first_day_this_month = now.replace(day=1)
+            last_day_last_month = first_day_this_month - timedelta(days=1)
+            first_day_last_month = last_day_last_month.replace(day=1)
+            return df_copy[
+                (df_copy['date'] >= first_day_last_month) & 
+                (df_copy['date'] <= last_day_last_month)
+            ]
+        elif time_period == 'Last 3 Months':
+            cutoff = now - timedelta(days=90)
+            return df_copy[df_copy['date'] >= cutoff]
+        elif time_period == 'This Year':
+            start_date = now.replace(month=1, day=1)
+            return df_copy[df_copy['date'] >= start_date]
+        else:  # All Time
+            return df_copy    
+    
     def _generate_chart_based_on_analysis(self, df: pd.DataFrame, analysis: Dict, original_query: str):
         """Generate chart based on analysis (shared with NLP)"""
         # Apply time filter
@@ -690,6 +796,7 @@ class EnhancedChartCreatorAgent:
                 insights = "Anomaly detected: " + "; ".join(anomaly_results['insights'][:2])
         
         # Route to appropriate chart handler based on intent
+        # Route to appropriate chart handler based on intent
         intent_handlers = {
             'income_breakdown': self._create_income_breakdown,
             'expense_breakdown': self._create_expense_breakdown,
@@ -699,9 +806,8 @@ class EnhancedChartCreatorAgent:
             'time_comparison': self._create_time_comparison,
             'trend_analysis': self._create_trend_analysis,
             'anomaly_detection': self._create_anomaly_chart,
-            'comprehensive_dashboard': self._create_comprehensive_dashboard
+            'comprehensive_dashboard': self._create_detailed_breakdown,  # UPDATED
         }
-        
         handler = intent_handlers.get(analysis['primary_intent'], self._create_comprehensive_dashboard)
         result = handler(filtered_df, analysis, original_query)
         
@@ -715,9 +821,7 @@ class EnhancedChartCreatorAgent:
         
         return result
 
-    # [Keep all the existing chart creation methods from your original code]
-    # _create_income_breakdown, _create_expense_breakdown, _create_comparison_chart, etc.
-    # ... (all your existing chart creation methods remain the same)
+    
 
     def _create_income_breakdown(self, df: pd.DataFrame, analysis: Dict, query: str):
         """Create income breakdown chart"""
@@ -737,10 +841,19 @@ class EnhancedChartCreatorAgent:
         category_totals = income_df.groupby('category')['amount'].sum()
         
         if len(category_totals) <= 1:
-            # Use bar chart for single category
+            # FIX: Create a proper DataFrame for single category
+            if len(category_totals) == 1:
+                chart_df = pd.DataFrame({
+                    'category': [category_totals.index[0]],
+                    'amount': [category_totals.values[0]]
+                })
+            else:
+                chart_df = pd.DataFrame({'category': [], 'amount': []})
+            
             fig = px.bar(
-                x=category_totals.index,
-                y=category_totals.values,
+                chart_df,
+                x='category',
+                y='amount',
                 title="Income by Category",
                 color_discrete_sequence=['#2ecc71']
             )
@@ -778,16 +891,25 @@ class EnhancedChartCreatorAgent:
         category_totals = expense_df.groupby('category')['amount'].sum()
         
         if len(category_totals) <= 1:
-            # Use bar chart for single category
+            # FIX: Create a proper DataFrame for single category
+            if len(category_totals) == 1:
+                chart_df = pd.DataFrame({
+                    'category': [category_totals.index[0]],
+                    'amount': [category_totals.values[0]]
+                })
+            else:
+                chart_df = pd.DataFrame({'category': [], 'amount': []})
+            
             fig = px.bar(
-                x=category_totals.index,
-                y=category_totals.values,
+                chart_df,
+                x='category',
+                y='amount',
                 title="Expenses by Category",
                 color_discrete_sequence=['#e74c3c']
             )
             chart_type = 'bar'
         else:
-            # Use pie chart for multiple categories
+            # Use pie chart for multiple categories - this part is fine
             fig = px.pie(
                 values=category_totals.values,
                 names=category_totals.index,
@@ -1266,52 +1388,446 @@ class EnhancedChartCreatorAgent:
                 marker_color='#3498db'
             ), 2, 2)
 
-    def _apply_visual_filters(self, df: pd.DataFrame, components: Dict) -> pd.DataFrame:
-        """Apply filters based on visual query components - WITH ROBUST CATEGORY FILTERING"""
-        if df is None or df.empty:
-            return pd.DataFrame()
+    def _create_detailed_breakdown(self, df: pd.DataFrame, analysis: Dict, query: str):
+        """Create detailed breakdown dashboard based on focus"""
+        focus = analysis['data_focus']
         
-        filtered_df = df.copy()
-        
-        # Apply chart focus filter
-        chart_focus = components.get('chart_focus', 'Expenses')
-        if chart_focus == 'Expenses':
-            filtered_df = filtered_df[filtered_df['type'] == 'expense']
-        elif chart_focus == 'Income':
-            filtered_df = filtered_df[filtered_df['type'] == 'income']
-        # For 'Savings' and 'Comparison', we keep both types
-        
-        # Apply time filter
-        time_period = components.get('time_period', 'All Time')
-        if time_period != "All Time":
-            # Convert visual time period to internal format
-            time_period_map = {
-                'This Month': 'this_month',
-                'Last Month': 'last_month',
-                'Last 3 Months': 'last_3_months',
-                'This Year': 'this_year'
-            }
-            internal_time_period = time_period_map.get(time_period, 'last_3_months')
-            filtered_df = self._apply_time_filter(filtered_df, internal_time_period)
-        
-        # Apply category filter - ROBUST FILTERING
-        specific_category = components.get('specific_category', 'All Categories')
-        if specific_category != "All Categories":
-            # Case-insensitive, trimmed comparison
-            filtered_df = filtered_df[
-                filtered_df['category'].astype(str).str.strip().str.lower() == 
-                specific_category.strip().lower()
-            ]
-        
-        # Apply amount filter
-        min_amount = components.get('min_amount', 0)
-        if min_amount > 0:
-            filtered_df = filtered_df[filtered_df['amount'] >= min_amount]
-        
-        return filtered_df        
+        if focus == 'expense':
+            return self._create_expense_detailed_dashboard(df, analysis, query)
+        elif focus == 'income':
+            return self._create_income_detailed_dashboard(df, analysis, query)
+        elif focus == 'savings':
+            return self._create_savings_detailed_dashboard(df, analysis, query)
+        else:  # both/comparison
+            return self._create_comprehensive_dashboard(df, analysis, query)
 
-    # [Include all other chart creation methods...]
-    # _create_expense_breakdown, _create_comparison_chart, _create_savings_trend, etc.
+    def _create_expense_detailed_dashboard(self, df: pd.DataFrame, analysis: Dict, query: str):
+        """Create detailed expense dashboard"""
+        expense_df = df[df['type'] == 'expense']
+        
+        if expense_df.empty:
+            return self._create_helpful_response("No Expense Data", "No expense data available")
+        
+        # Create subplots for detailed expense view
+        fig = make_subplots(
+            rows=2, cols=2,
+            subplot_titles=(
+                'Expense Distribution by Category', 
+                'Monthly Expense Trends', 
+                'Top Expense Categories',
+                'Expense Timeline (Last 30 Days)'
+            ),
+            specs=[
+                [{"type": "pie"}, {"type": "xy"}],
+                [{"type": "bar"}, {"type": "xy"}]
+            ]
+        )
+        
+        # Pie chart - Expense distribution by category
+        category_totals = expense_df.groupby('category')['amount'].sum()
+        if not category_totals.empty:
+            fig.add_trace(go.Pie(
+                labels=category_totals.index,
+                values=category_totals.values,
+                name="Expense Distribution",
+                marker=dict(colors=px.colors.sequential.RdBu),
+                textinfo='label+percent',
+                hole=0.3
+            ), 1, 1)
+        
+        # Line chart - Monthly expense trends
+        expense_df_copy = expense_df.copy()
+        expense_df_copy['month'] = expense_df_copy['date'].dt.to_period('M').astype(str)
+        monthly_expenses = expense_df_copy.groupby('month')['amount'].sum()
+        if not monthly_expenses.empty:
+            fig.add_trace(go.Scatter(
+                x=monthly_expenses.index,
+                y=monthly_expenses.values,
+                mode='lines+markers',
+                name='Monthly Expenses',
+                line=dict(color='#e74c3c', width=3),
+                marker=dict(size=8, color='#c0392b')
+            ), 1, 2)
+        
+        # Bar chart - Top expense categories
+        top_categories = category_totals.nlargest(8)
+        if not top_categories.empty:
+            fig.add_trace(go.Bar(
+                x=top_categories.index,
+                y=top_categories.values,
+                name='Top Expense Categories',
+                marker_color='#e74c3c',
+                text=top_categories.values,
+                texttemplate='$%{text:.2f}',
+                textposition='auto',
+            ), 2, 1)
+        
+        # Timeline - Daily expenses (last 30 days)
+        expense_df_copy['date_only'] = expense_df_copy['date'].dt.date
+        daily_expenses = expense_df_copy.groupby('date_only')['amount'].sum().tail(30)  # Last 30 days
+        if not daily_expenses.empty:
+            fig.add_trace(go.Scatter(
+                x=daily_expenses.index,
+                y=daily_expenses.values,
+                mode='lines+markers',
+                name='Daily Expenses',
+                line=dict(color='#d35400', width=2),
+                marker=dict(size=6, color='#e67e22'),
+                fill='tozeroy',
+                fillcolor='rgba(231, 76, 60, 0.2)'
+            ), 2, 2)
+        
+        # Calculate statistics for annotations
+        total_expenses = expense_df['amount'].sum()
+        avg_monthly = monthly_expenses.mean() if not monthly_expenses.empty else 0
+        largest_category = category_totals.idxmax() if not category_totals.empty else "N/A"
+        largest_amount = category_totals.max() if not category_totals.empty else 0
+        largest_percentage = (largest_amount / total_expenses * 100) if total_expenses > 0 else 0
+        
+        # Calculate expense trends
+        expense_trend = ""
+        if not monthly_expenses.empty and len(monthly_expenses) > 1:
+            expense_growth = ((monthly_expenses.iloc[-1] - monthly_expenses.iloc[0]) / monthly_expenses.iloc[0] * 100) if monthly_expenses.iloc[0] > 0 else 0
+            expense_trend = f"Trend: {expense_growth:+.1f}%"
+        
+        # Update layout with better styling and annotations
+        fig.update_layout(
+            height=700,
+            title_text="Detailed Expense Analysis Dashboard",
+            showlegend=True,
+            template="plotly_white",
+            annotations=[
+                dict(
+                    text=f"Total Expenses: ${total_expenses:,.2f}<br>"
+                        f"Avg Monthly: ${avg_monthly:,.2f}<br>"
+                        f"Largest Category: {largest_category}<br>"
+                        f"({largest_percentage:.1f}% of total)",
+                    x=0.02, y=0.98, xref="paper", yref="paper",
+                    xanchor="left", yanchor="top",
+                    bgcolor="rgba(255,255,255,0.9)",
+                    bordercolor="black",
+                    borderwidth=1,
+                    showarrow=False,
+                    font=dict(size=12, color="black")
+                )
+            ]
+        )
+        
+        # Update subplot titles and axes
+        fig.update_xaxes(title_text="Month", row=1, col=2)
+        fig.update_yaxes(title_text="Amount ($)", row=1, col=2)
+        fig.update_xaxes(title_text="Expense Category", row=2, col=1)
+        fig.update_yaxes(title_text="Amount ($)", row=2, col=1)
+        fig.update_xaxes(title_text="Date", row=2, col=2)
+        fig.update_yaxes(title_text="Amount ($)", row=2, col=2)
+        
+        # Generate insights
+        insights_parts = []
+        insights_parts.append(f"Total expenses: ${total_expenses:.2f}")
+        
+        if not monthly_expenses.empty and len(monthly_expenses) > 1:
+            expense_growth = ((monthly_expenses.iloc[-1] - monthly_expenses.iloc[0]) / monthly_expenses.iloc[0] * 100) if monthly_expenses.iloc[0] > 0 else 0
+            insights_parts.append(f"Expense trend: {expense_growth:+.1f}%")
+        
+        if not category_totals.empty:
+            insights_parts.append(f"Largest category: {largest_category} ({largest_percentage:.1f}%)")
+            insights_parts.append(f"Expense categories: {len(category_totals)} total")
+        
+        # Add anomaly detection insights if available
+        if hasattr(self, 'anomaly_detector'):
+            anomaly_results = self.anomaly_detector.detect_spending_anomalies(expense_df)
+            if anomaly_results['anomalous_months_count'] > 0:
+                insights_parts.append(f"⚠️ {anomaly_results['anomalous_months_count']} unusual spending patterns detected")
+        
+        insights = "; ".join(insights_parts)
+        
+        caption = self._generate_comprehensive_caption(query, analysis, insights, 'dashboard')
+        
+        return self._finalize_chart(fig, "expense_detailed_dashboard", True, caption)
+
+    def _create_income_detailed_dashboard(self, df: pd.DataFrame, analysis: Dict, query: str):
+        """Create detailed income dashboard"""
+        income_df = df[df['type'] == 'income']
+        
+        if income_df.empty:
+            return self._create_helpful_response("No Income Data", "No income data available")
+        
+        # Create subplots for detailed income view
+        fig = make_subplots(
+            rows=2, cols=2,
+            subplot_titles=(
+                'Income Sources Distribution', 
+                'Monthly Income Trends', 
+                'Top Income Sources',
+                'Income Timeline (Last 30 Days)'
+            ),
+            specs=[
+                [{"type": "pie"}, {"type": "xy"}],
+                [{"type": "bar"}, {"type": "xy"}]
+            ]
+        )
+        
+        # Pie chart - Income sources distribution
+        category_totals = income_df.groupby('category')['amount'].sum()
+        if not category_totals.empty:
+            fig.add_trace(go.Pie(
+                labels=category_totals.index,
+                values=category_totals.values,
+                name="Income Distribution",
+                marker=dict(colors=px.colors.qualitative.Set2),
+                textinfo='label+percent',
+                hole=0.3
+            ), 1, 1)
+        
+        # Line chart - Monthly income trends
+        income_df_copy = income_df.copy()
+        income_df_copy['month'] = income_df_copy['date'].dt.to_period('M').astype(str)
+        monthly_income = income_df_copy.groupby('month')['amount'].sum()
+        if not monthly_income.empty:
+            fig.add_trace(go.Scatter(
+                x=monthly_income.index,
+                y=monthly_income.values,
+                mode='lines+markers',
+                name='Monthly Income',
+                line=dict(color='#27ae60', width=3),
+                marker=dict(size=8, color='#2ecc71')
+            ), 1, 2)
+        
+        # Bar chart - Top income sources
+        top_categories = category_totals.nlargest(8)
+        if not top_categories.empty:
+            fig.add_trace(go.Bar(
+                x=top_categories.index,
+                y=top_categories.values,
+                name='Top Income Sources',
+                marker_color='#2ecc71',
+                text=top_categories.values,
+                texttemplate='$%{text:.2f}',
+                textposition='auto',
+            ), 2, 1)
+        
+        # Timeline - Daily income (last 30 days)
+        income_df_copy['date_only'] = income_df_copy['date'].dt.date
+        daily_income = income_df_copy.groupby('date_only')['amount'].sum().tail(30)  # Last 30 days
+        if not daily_income.empty:
+            fig.add_trace(go.Scatter(
+                x=daily_income.index,
+                y=daily_income.values,
+                mode='lines+markers',
+                name='Daily Income',
+                line=dict(color='#3498db', width=2),
+                marker=dict(size=6, color='#2980b9'),
+                fill='tozeroy',
+                fillcolor='rgba(52, 152, 219, 0.2)'
+            ), 2, 2)
+        
+        # Add some statistics as annotations
+        total_income = income_df['amount'].sum()
+        avg_monthly = monthly_income.mean() if not monthly_income.empty else 0
+        primary_source = category_totals.idxmax() if not category_totals.empty else "N/A"
+        primary_amount = category_totals.max() if not category_totals.empty else 0
+        primary_percentage = (primary_amount / total_income * 100) if total_income > 0 else 0
+        
+        # Update layout with better styling and annotations
+        fig.update_layout(
+            height=700,
+            title_text="Detailed Income Analysis Dashboard",
+            showlegend=True,
+            template="plotly_white",
+            annotations=[
+                dict(
+                    text=f"Total Income: ${total_income:,.2f}<br>"
+                        f"Avg Monthly: ${avg_monthly:,.2f}<br>"
+                        f"Primary Source: {primary_source}<br>"
+                        f"({primary_percentage:.1f}% of total)",
+                    x=0.02, y=0.98, xref="paper", yref="paper",
+                    xanchor="left", yanchor="top",
+                    bgcolor="rgba(255,255,255,0.9)",
+                    bordercolor="black",
+                    borderwidth=1,
+                    showarrow=False,
+                    font=dict(size=12, color="black")
+                )
+            ]
+        )
+        
+        # Update subplot titles and axes
+        fig.update_xaxes(title_text="Month", row=1, col=2)
+        fig.update_yaxes(title_text="Amount ($)", row=1, col=2)
+        fig.update_xaxes(title_text="Income Source", row=2, col=1)
+        fig.update_yaxes(title_text="Amount ($)", row=2, col=1)
+        fig.update_xaxes(title_text="Date", row=2, col=2)
+        fig.update_yaxes(title_text="Amount ($)", row=2, col=2)
+        
+        # Generate insights
+        insights_parts = []
+        insights_parts.append(f"Total income: ${total_income:.2f}")
+        
+        if not monthly_income.empty and len(monthly_income) > 1:
+            income_growth = ((monthly_income.iloc[-1] - monthly_income.iloc[0]) / monthly_income.iloc[0] * 100) if monthly_income.iloc[0] > 0 else 0
+            insights_parts.append(f"Income growth: {income_growth:+.1f}%")
+        
+        if not category_totals.empty:
+            insights_parts.append(f"Primary source: {primary_source} ({primary_percentage:.1f}%)")
+            insights_parts.append(f"Income sources: {len(category_totals)} categories")
+        
+        insights = "; ".join(insights_parts)
+        
+        caption = self._generate_comprehensive_caption(query, analysis, insights, 'dashboard')
+        
+        return self._finalize_chart(fig, "income_detailed_dashboard", True, caption)
+    
+    def _create_savings_detailed_dashboard(self, df: pd.DataFrame, analysis: Dict, query: str):
+        """Create detailed savings dashboard"""
+        # Prepare data for savings calculation
+        df_copy = df.copy()
+        df_copy['date'] = pd.to_datetime(df_copy['date'], errors='coerce')
+        df_copy = df_copy.dropna(subset=['date'])
+        df_copy['month'] = df_copy['date'].dt.to_period('M').astype(str)
+        
+        monthly_data = df_copy.groupby(['month', 'type'])['amount'].sum().unstack(fill_value=0)
+        
+        if 'income' not in monthly_data.columns or 'expense' not in monthly_data.columns:
+            return self._create_helpful_response(
+                "Insufficient Data for Savings Analysis",
+                "Need both income and expense data to analyze savings."
+            )
+        
+        # Calculate savings metrics
+        monthly_savings = monthly_data['income'] - monthly_data['expense']
+        cumulative_savings = monthly_savings.cumsum()
+        savings_rate = (monthly_savings / monthly_data['income'] * 100).fillna(0)
+        
+        # Create subplots for detailed savings view
+        fig = make_subplots(
+            rows=2, cols=2,
+            subplot_titles=(
+                'Monthly Savings Trend', 
+                'Cumulative Savings', 
+                'Savings Rate Over Time',
+                'Income vs Expenses'
+            ),
+            specs=[
+                [{"type": "xy"}, {"type": "xy"}],
+                [{"type": "xy"}, {"type": "xy"}]
+            ]
+        )
+        
+        # Monthly savings bar chart
+        if not monthly_savings.empty:
+            colors = ['#e74c3c' if x < 0 else '#27ae60' for x in monthly_savings.values]
+            fig.add_trace(go.Bar(
+                x=monthly_savings.index,
+                y=monthly_savings.values,
+                name='Monthly Savings',
+                marker_color=colors,
+                text=monthly_savings.values,
+                texttemplate='$%{text:.0f}',
+                textposition='auto',
+            ), 1, 1)
+        
+        # Cumulative savings line chart
+        if not cumulative_savings.empty:
+            fig.add_trace(go.Scatter(
+                x=cumulative_savings.index,
+                y=cumulative_savings.values,
+                mode='lines+markers',
+                name='Cumulative Savings',
+                line=dict(color='#2980b9', width=4),
+                marker=dict(size=8, color='#3498db'),
+                fill='tozeroy',
+                fillcolor='rgba(52, 152, 219, 0.2)'
+            ), 1, 2)
+        
+        # Savings rate line chart
+        if not savings_rate.empty:
+            fig.add_trace(go.Scatter(
+                x=savings_rate.index,
+                y=savings_rate.values,
+                mode='lines+markers',
+                name='Savings Rate',
+                line=dict(color='#9b59b6', width=3),
+                marker=dict(size=6, color='#8e44ad')
+            ), 2, 1)
+            
+            # Add zero line reference
+            fig.add_hline(y=0, line_dash="dash", line_color="red", row=2, col=1)
+        
+        # Income vs Expenses comparison
+        if not monthly_data.empty:
+            fig.add_trace(go.Bar(
+                x=monthly_data.index,
+                y=monthly_data['income'],
+                name='Income',
+                marker_color='#27ae60',
+                opacity=0.7
+            ), 2, 2)
+            
+            fig.add_trace(go.Bar(
+                x=monthly_data.index,
+                y=monthly_data['expense'],
+                name='Expenses',
+                marker_color='#e74c3c',
+                opacity=0.7
+            ), 2, 2)
+        
+        # Calculate statistics for annotations
+        total_savings = cumulative_savings.iloc[-1] if not cumulative_savings.empty else 0
+        avg_monthly_savings = monthly_savings.mean() if not monthly_savings.empty else 0
+        positive_months = (monthly_savings > 0).sum()
+        total_months = len(monthly_savings)
+        savings_consistency = (positive_months / total_months * 100) if total_months > 0 else 0
+        avg_savings_rate = savings_rate.mean() if not savings_rate.empty else 0
+        
+        # Update layout
+        fig.update_layout(
+            height=700,
+            title_text="Detailed Savings Analysis Dashboard",
+            showlegend=True,
+            template="plotly_white",
+            barmode='group',
+            annotations=[
+                dict(
+                    text=f"Total Savings: ${total_savings:,.2f}<br>"
+                        f"Avg Monthly: ${avg_monthly_savings:,.2f}<br>"
+                        f"Savings Rate: {avg_savings_rate:.1f}%<br>"
+                        f"Positive Months: {savings_consistency:.1f}%",
+                    x=0.02, y=0.98, xref="paper", yref="paper",
+                    xanchor="left", yanchor="top",
+                    bgcolor="rgba(255,255,255,0.9)",
+                    bordercolor="black",
+                    borderwidth=1,
+                    showarrow=False,
+                    font=dict(size=12, color="black")
+                )
+            ]
+        )
+        
+        # Update axes titles
+        fig.update_xaxes(title_text="Month", row=1, col=1)
+        fig.update_yaxes(title_text="Amount ($)", row=1, col=1)
+        fig.update_xaxes(title_text="Month", row=1, col=2)
+        fig.update_yaxes(title_text="Amount ($)", row=1, col=2)
+        fig.update_xaxes(title_text="Month", row=2, col=1)
+        fig.update_yaxes(title_text="Savings Rate (%)", row=2, col=1)
+        fig.update_xaxes(title_text="Month", row=2, col=2)
+        fig.update_yaxes(title_text="Amount ($)", row=2, col=2)
+        
+        # Generate insights
+        insights_parts = []
+        insights_parts.append(f"Total savings: ${total_savings:.2f}")
+        insights_parts.append(f"Average monthly savings: ${avg_monthly_savings:.2f}")
+        insights_parts.append(f"Savings rate: {avg_savings_rate:.1f}%")
+        insights_parts.append(f"Consistency: {savings_consistency:.1f}% positive months")
+        
+        if total_savings < 0:
+            insights_parts.append("⚠️ Negative savings detected")
+        
+        insights = "; ".join(insights_parts)
+        
+        caption = self._generate_comprehensive_caption(query, analysis, insights, 'dashboard')
+        
+        return self._finalize_chart(fig, "savings_detailed_dashboard", True, caption)
 
     def get_visual_builder_categories(self) -> List[str]:
         """Get categories for visual query builder"""
@@ -1874,6 +2390,11 @@ class ChartCreatorAgent:
     """Main Chart Creator Agent class for external use"""
     def __init__(self, data_agent):
         self.enhanced_agent = EnhancedChartCreatorAgent(data_agent)
+
+    def get_filtered_data_summary(self, components: Dict[str, Any]) -> pd.DataFrame:
+        """Get filtered data for summary display"""
+        df = self.enhanced_agent.data_agent.get_transactions_df()
+        return self.enhanced_agent._apply_visual_filters(df, components)          
     
     def visual_components_to_chart(self, components: Dict[str, Any]):
         """Main method to convert visual components to chart"""
@@ -1919,7 +2440,4 @@ class ChartCreatorAgent:
         """Get query suggestions"""
         return self.enhanced_agent.get_query_suggestions(partial_query)
 
-    # [Keep all other existing methods for backward compatibility...]
-    # natural_language_to_chart, predictive_charts, comparative_charts, etc.
-
-       
+    
