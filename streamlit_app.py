@@ -3,6 +3,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import date, datetime, timedelta
+from datetime import timedelta
 from datetime import date, datetime
 import os
 import sys
@@ -819,6 +820,10 @@ def charts_page():
     st.header("📈 Advanced Charts & Visualizations")
     
     data_agent = st.session_state.architect_agent.data_agent
+    # Ensure chart_agent is properly initialized
+    if not hasattr(st.session_state.architect_agent, 'chart_agent') or st.session_state.architect_agent.chart_agent is None:
+        st.session_state.architect_agent.chart_agent = ChartCreatorAgent(data_agent)
+    
     chart_agent = st.session_state.architect_agent.chart_agent
     df = data_agent.get_transactions_df()
     
@@ -966,7 +971,7 @@ def charts_page():
 def _render_enhanced_visual_query_builder(chart_agent, df):
     """Render the enhanced Visual Query Builder tab content"""
     st.markdown("## 🎨 Visual Query Builder")
-    st.markdown("Build custom charts using intuitive visual components")
+    st.markdown("Build custom charts using intuitive visual components - **Charts generate automatically as you make selections**")
     
     # Step 1: Chart Configuration
     st.markdown("### 1. Chart Configuration")
@@ -979,9 +984,7 @@ def _render_enhanced_visual_query_builder(chart_agent, df):
             "Focus on:",
             ["Expenses", "Income", "Savings", "Comparison"],
             key="vb_focus",
-            index=["Expenses", "Income", "Savings", "Comparison"].index(
-                st.session_state.get('vb_focus_value', 'Expenses')
-            )   
+            help="Select what type of data to analyze"
         )
     
     with col2:
@@ -1026,9 +1029,6 @@ def _render_enhanced_visual_query_builder(chart_agent, df):
             help="Focus on a specific category"
         )
     
-    # Step 3: Preview and Generate
-    st.markdown("### 3. Preview & Generate")
-    
     # Build components dictionary
     components = {
         'chart_focus': chart_focus,
@@ -1037,6 +1037,9 @@ def _render_enhanced_visual_query_builder(chart_agent, df):
         'min_amount': min_amount,
         'specific_category': specific_category
     }
+    
+    # Step 3: Auto-generate chart based on current selections
+    st.markdown("### 3. Live Chart Preview")
     
     # Preview section
     with st.expander("👁️ Query Preview", expanded=True):
@@ -1062,71 +1065,64 @@ def _render_enhanced_visual_query_builder(chart_agent, df):
             
         st.success(f"🎯 **Recommended Chart Type:** {chart_type}")
     
-    # Generate button
-    col1, col2 = st.columns([1, 2])
-    
-    with col1:
-        if st.button("🚀 Generate Chart", type="primary", use_container_width=True, key="vb_generate"):
-            with st.spinner("🔄 Building your custom chart..."):
-                try:
-                    fig, caption = chart_agent.visual_components_to_chart(components)
-                    st.plotly_chart(fig, use_container_width=True)
-                    _display_visual_builder_caption(caption, components)
-                    st.success("✅ Chart generated successfully!")
-                    
-                    # Show data summary
-                    with st.expander("📊 Data Summary", expanded=False):
-                        filtered_df = _apply_visual_filters(df, components)
-                        if not filtered_df.empty:
-                            total_amount = filtered_df['amount'].sum()
-                            transaction_count = len(filtered_df)
-                            st.write(f"**Transactions analyzed:** {transaction_count}")
-                            st.write(f"**Total amount:** ${total_amount:,.2f}")
-                            
-                except Exception as e:
-                    st.error(f"❌ Failed to generate chart: {str(e)}")
-    
-    with col2:
-        if st.button("🔄 Reset Builder", type="secondary", use_container_width=True, key="vb_reset"):
-            st.rerun()
-    
-    # Quick templates section - FIXED INDENTATION (this should be INSIDE the function)
-    st.markdown("---")
-    st.markdown("### 🚀 Quick Templates")
+    # AUTO-GENERATE CHART based on current selections
+    with st.spinner("🔄 Generating chart based on your selections..."):
+        try:
+            result = chart_agent.visual_components_to_chart(components)
+            
+            # Handle different return types from chart agent
+            if isinstance(result, tuple) and len(result) == 2:
+                fig, caption = result
+                st.plotly_chart(fig, use_container_width=True)
+                _display_visual_builder_caption(caption, components)
+                st.success("✅ Chart generated successfully!")
+                
+                # Show data summary
+                with st.expander("📊 Data Summary", expanded=False):
+                    filtered_df = _apply_visual_filters(df, components)
+                    if not filtered_df.empty:
+                        total_amount = filtered_df['amount'].sum()
+                        transaction_count = len(filtered_df)
+                        st.write(f"**Transactions analyzed:** {transaction_count}")
+                        st.write(f"**Total amount:** ${total_amount:,.2f}")
+                        
+                        # Show breakdown by type if applicable
+                        if 'type' in filtered_df.columns:
+                            type_breakdown = filtered_df.groupby('type')['amount'].sum()
+                            for t_type, amount in type_breakdown.items():
+                                st.write(f"**{t_type.title()}:** ${amount:,.2f}")
+                    else:
+                        st.info("No data matches your current filters.")
+            else:
+                # Handle error responses
+                st.error("❌ Could not generate chart. Please check your data and filters.")
+                
+        except Exception as e:
+            st.error(f"❌ Failed to generate chart: {str(e)}")
+            st.info("💡 Try adjusting your filters or adding more transaction data.")
 
-    template_cols = st.columns(4)
+    # Reset button
+    if st.button("🔄 Reset All Selections", type="secondary", use_container_width=True, key="vb_reset"):
+        # Clear relevant session state keys
+        keys_to_clear = ['vb_focus', 'vb_time', 'vb_detail', 'vb_min_amount', 'vb_category']
+        for key in keys_to_clear:
+            if key in st.session_state:
+                del st.session_state[key]
+        st.rerun()
 
-    with template_cols[0]:
-        if st.button("💰 Expense Overview", use_container_width=True, key="template_expense"):
-            # Use callbacks or rerun with parameters instead of modifying session state directly
-            st.session_state['vb_focus_value'] = "Expenses"
-            st.session_state['vb_time_value'] = "Last 3 Months"
-            st.session_state['vb_detail_value'] = "By Category"
-            st.rerun()
-
-    with template_cols[1]:
-        if st.button("📈 Income Trends", use_container_width=True, key="template_income"):
-            st.session_state['vb_focus_value'] = "Income"
-            st.session_state['vb_time_value'] = "This Year"
-            st.session_state['vb_detail_value'] = "Trend Over Time"
-            st.rerun()
-
-    with template_cols[2]:
-        if st.button("💸 Spending Analysis", use_container_width=True, key="template_spending"):
-            st.session_state['vb_focus_value'] = "Expenses"
-            st.session_state['vb_time_value'] = "This Month"
-            st.session_state['vb_detail_value'] = "Detailed Breakdown"
-            st.rerun()
-
-    with template_cols[3]:
-        if st.button("⚖️ Income vs Expenses", use_container_width=True, key="template_comparison"):
-            st.session_state['vb_focus_value'] = "Comparison"
-            st.session_state['vb_time_value'] = "Last 6 Months"
-            st.session_state['vb_detail_value'] = "Summary"
-            st.rerun()
-
+    # Debug section (optional - can be removed in production)
+    with st.expander("🔧 Debug Info", expanded=False):
+        st.write("**Components:**", components)
+        st.write("**Available Categories:**", available_cats)
+        st.write("**Data Shape:**", df.shape if df is not None else "No data")
+        if df is not None:
+            st.write("**Data Columns:**", df.columns.tolist())
+            st.write("**Transaction Types:**", df['type'].unique().tolist() if 'type' in df.columns else "No type column")
+            st.write("**Sample Data:**")
+            st.dataframe(df.head(3))
+            
 def _apply_visual_filters(df: pd.DataFrame, components: Dict) -> pd.DataFrame:
-    """Apply filters based on visual query components"""
+    """Apply filters based on visual query components WITH ROBUST CATEGORY FILTERING"""
     if df is None or df.empty:
         return pd.DataFrame()
     
@@ -1145,10 +1141,14 @@ def _apply_visual_filters(df: pd.DataFrame, components: Dict) -> pd.DataFrame:
     if time_period != "All Time":
         filtered_df = _apply_time_filter_to_df(filtered_df, time_period)
     
-    # Apply category filter
+    # Apply category filter - ROBUST FILTERING
     specific_category = components.get('specific_category', 'All Categories')
     if specific_category != "All Categories":
-        filtered_df = filtered_df[filtered_df['category'] == specific_category]
+        # Case-insensitive, trimmed comparison
+        filtered_df = filtered_df[
+            filtered_df['category'].astype(str).str.strip().str.lower() == 
+            specific_category.strip().lower()
+        ]
     
     # Apply amount filter
     min_amount = components.get('min_amount', 0)
@@ -1158,31 +1158,42 @@ def _apply_visual_filters(df: pd.DataFrame, components: Dict) -> pd.DataFrame:
     return filtered_df
 
 def _apply_time_filter_to_df(df: pd.DataFrame, time_period: str) -> pd.DataFrame:
-    """Apply time filter to dataframe"""
+    """Apply time filter to dataframe for visual query builder"""
     df_copy = df.copy()
-    df_copy['date'] = pd.to_datetime(df_copy['date'], errors='coerce')
-    df_copy = df_copy.dropna(subset=['date'])
+    
+    # Ensure date column is properly converted
+    if 'date' in df_copy.columns:
+        df_copy['date'] = pd.to_datetime(df_copy['date'], errors='coerce')
+        df_copy = df_copy.dropna(subset=['date'])
+    
+    if df_copy.empty:
+        return df_copy
     
     now = datetime.now()
     if time_period == 'This Month':
         start_date = now.replace(day=1)
         return df_copy[df_copy['date'] >= start_date]
     elif time_period == 'Last Month':
-        end_date = now.replace(day=1) - timedelta(days=1)  # Fixed: timedelta imported
-        start_date = end_date.replace(day=1)
-        return df_copy[(df_copy['date'] >= start_date) & (df_copy['date'] <= end_date)]
+        first_day_this_month = now.replace(day=1)
+        last_day_last_month = first_day_this_month - timedelta(days=1)
+        first_day_last_month = last_day_last_month.replace(day=1)
+        return df_copy[
+            (df_copy['date'] >= first_day_last_month) & 
+            (df_copy['date'] <= last_day_last_month)
+        ]
     elif time_period == 'Last 3 Months':
-        cutoff = now - timedelta(days=90)  # Fixed: timedelta imported
+        cutoff = now - timedelta(days=90)
         return df_copy[df_copy['date'] >= cutoff]
     elif time_period == 'This Year':
         start_date = now.replace(month=1, day=1)
         return df_copy[df_copy['date'] >= start_date]
-    else:
+    else:  # All Time
         return df_copy
 
 def _display_visual_builder_caption(caption, components):
     """Display caption for visual query builder charts"""
     if not isinstance(caption, dict):
+        st.info("📊 Chart generated successfully!")
         return
     
     st.markdown("---")
@@ -1197,15 +1208,19 @@ def _display_visual_builder_caption(caption, components):
             <p><strong>Focus:</strong> {components.get('chart_focus', 'N/A')}</p>
             <p><strong>Time Period:</strong> {components.get('time_period', 'N/A')}</p>
             <p><strong>Detail Level:</strong> {components.get('detail_level', 'N/A')}</p>
+            <p><strong>Category:</strong> {components.get('specific_category', 'All Categories')}</p>
         </div>
         """, unsafe_allow_html=True)
     
     with col2:
+        chart_type = caption.get('chart_type_used', 'N/A')
+        data_points = caption.get('data_points', 'N/A')
+        
         st.markdown(f"""
         <div style="background-color: #f8f9fa; padding: 1rem; border-radius: 10px; border-left: 4px solid #28a745;">
             <h4 style="color: #28a745; margin-bottom: 1rem;">📊 Chart Information</h4>
-            <p><strong>Chart Type:</strong> {caption.get('chart_type_used', 'N/A').title()}</p>
-            <p><strong>Data Points:</strong> {caption.get('data_points', 'N/A')}</p>
+            <p><strong>Chart Type:</strong> {chart_type.title() if chart_type != 'N/A' else 'Auto-selected'}</p>
+            <p><strong>Data Focus:</strong> {caption.get('data_focus', 'N/A').title()}</p>
             <p><strong>Query Type:</strong> Visual Builder</p>
         </div>
         """, unsafe_allow_html=True)
@@ -1218,6 +1233,16 @@ def _display_visual_builder_caption(caption, components):
             <p style="color: #856404;">{caption.get('key_insights', 'No specific insights available.')}</p>
         </div>
         """, unsafe_allow_html=True)
+    
+    # Enhanced insights if available
+    if caption.get('enhanced_insights'):
+        st.markdown(f"""
+        <div style="background-color: #d4edda; padding: 1rem; border-radius: 10px; border-left: 4px solid #28a745; margin-top: 1rem;">
+            <h4 style="color: #155724; margin-bottom: 1rem;">🔍 Enhanced Insights</h4>
+            <p style="color: #155724;">{caption.get('enhanced_insights')}</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
 def insights_page():
     import streamlit as st
     from agents.insight_generator import InsightGeneratorAgent
