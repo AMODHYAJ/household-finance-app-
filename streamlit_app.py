@@ -1006,7 +1006,7 @@ def _render_enhanced_visual_query_builder(chart_agent, df):
         )
     
     # Step 2: Advanced Filters
-    st.markdown("### 2. Advanced Filters (Optional)")
+    st.markdown("### 2. Advanced Filters")
     
     col1, col2 = st.columns(2)
     
@@ -1020,14 +1020,27 @@ def _render_enhanced_visual_query_builder(chart_agent, df):
         )
     
     with col2:
-        # Get available categories dynamically
+        # Get available categories dynamically - MULTI-SELECT with "All Categories" option
         available_cats = chart_agent.get_visual_builder_categories()
-        specific_category = st.selectbox(
-            "Specific Category", 
-            ["All Categories"] + available_cats,
-            key="vb_category",
-            help="Focus on a specific category"
+        # Add "All Categories" as the first option
+        all_categories_option = ["All Categories"]
+        category_options = all_categories_option + available_cats
+        
+        specific_categories = st.multiselect(
+            "Select Categories", 
+            options=category_options,
+            default=["All Categories"],  # Default to "All Categories"
+            key="vb_categories",
+            help="Select one or more categories to focus on. Choose 'All Categories' to include everything."
         )
+        
+        # Handle "All Categories" selection logic
+        if "All Categories" in specific_categories:
+            # If "All Categories" is selected along with other categories, show warning
+            if len(specific_categories) > 1:
+                st.warning("⚠️ 'All Categories' is selected. Other category selections will be ignored.")
+                # Keep only "All Categories"
+                specific_categories = ["All Categories"]
     
     # Build components dictionary
     components = {
@@ -1035,35 +1048,38 @@ def _render_enhanced_visual_query_builder(chart_agent, df):
         'time_period': time_period,
         'detail_level': detail_level,
         'min_amount': min_amount,
-        'specific_category': specific_category
+        'specific_categories': specific_categories
     }
     
     # Step 3: Auto-generate chart based on current selections
     st.markdown("### 3. Live Chart Preview")
     
-    # Preview section
+    # Preview section with dynamic chart type description
     with st.expander("👁️ Query Preview", expanded=True):
         query_parts = []
         if chart_focus: query_parts.append(f"**{chart_focus}**")
         if time_period != "All Time": query_parts.append(f"for **{time_period}**")
         if detail_level != "Summary": query_parts.append(f"as **{detail_level}**")
-        if specific_category != "All Categories": query_parts.append(f"in **{specific_category}**")
+        
+        # Handle category display
+        if specific_categories:
+            if "All Categories" in specific_categories:
+                query_parts.append("across **All Categories**")
+            elif len(specific_categories) == 1:
+                query_parts.append(f"in **{specific_categories[0]}**")
+            else:
+                query_parts.append(f"in **{len(specific_categories)} selected categories**")
+        
         if min_amount > 0: query_parts.append(f"over **${min_amount}**")
         
         generated_query = " • ".join(query_parts)
         
         st.info(f"**Your Chart Will Show:** {generated_query}")
         
-        # Chart type prediction
-        chart_type = "Bar Chart"
-        if detail_level == "By Category" and chart_focus in ["Expenses", "Income"]:
-            chart_type = "Pie Chart"
-        elif detail_level == "Trend Over Time":
-            chart_type = "Line Chart"
-        elif detail_level == "Detailed Breakdown":
-            chart_type = "Bar Chart"
-            
-        st.success(f"🎯 **Recommended Chart Type:** {chart_type}")
+        # Dynamic chart type description based on focus and detail level
+        selected_cat_count = 0 if "All Categories" in specific_categories else len(specific_categories)
+        chart_description = _get_chart_description(chart_focus, detail_level, selected_cat_count)
+        st.success(f"🎯 **Chart Type:** {chart_description}")
     
     # AUTO-GENERATE CHART based on current selections
     with st.spinner("🔄 Generating chart based on your selections..."):
@@ -1079,7 +1095,7 @@ def _render_enhanced_visual_query_builder(chart_agent, df):
                 
                 # Show data summary
                 with st.expander("📊 Data Summary", expanded=False):
-                    filtered_df = _apply_visual_filters(df, components)
+                    filtered_df = chart_agent.get_filtered_data_summary(components)
                     if not filtered_df.empty:
                         total_amount = filtered_df['amount'].sum()
                         transaction_count = len(filtered_df)
@@ -1091,6 +1107,15 @@ def _render_enhanced_visual_query_builder(chart_agent, df):
                             type_breakdown = filtered_df.groupby('type')['amount'].sum()
                             for t_type, amount in type_breakdown.items():
                                 st.write(f"**{t_type.title()}:** ${amount:,.2f}")
+                        
+                        # Show categories breakdown
+                        st.write("**Categories Breakdown:**")
+                        category_breakdown = filtered_df.groupby('category')['amount'].sum().sort_values(ascending=False)
+                        for category, amount in category_breakdown.head(10).items():  # Show top 10
+                            st.write(f"- {category}: ${amount:,.2f}")
+                            
+                        if len(category_breakdown) > 10:
+                            st.write(f"- ... and {len(category_breakdown) - 10} more categories")
                     else:
                         st.info("No data matches your current filters.")
             else:
@@ -1104,25 +1129,56 @@ def _render_enhanced_visual_query_builder(chart_agent, df):
     # Reset button
     if st.button("🔄 Reset All Selections", type="secondary", use_container_width=True, key="vb_reset"):
         # Clear relevant session state keys
-        keys_to_clear = ['vb_focus', 'vb_time', 'vb_detail', 'vb_min_amount', 'vb_category']
+        keys_to_clear = ['vb_focus', 'vb_time', 'vb_detail', 'vb_min_amount', 'vb_categories']
         for key in keys_to_clear:
             if key in st.session_state:
                 del st.session_state[key]
         st.rerun()
 
-    # Debug section (optional - can be removed in production)
-    with st.expander("🔧 Debug Info", expanded=False):
-        st.write("**Components:**", components)
-        st.write("**Available Categories:**", available_cats)
-        st.write("**Data Shape:**", df.shape if df is not None else "No data")
-        if df is not None:
-            st.write("**Data Columns:**", df.columns.tolist())
-            st.write("**Transaction Types:**", df['type'].unique().tolist() if 'type' in df.columns else "No type column")
-            st.write("**Sample Data:**")
-            st.dataframe(df.head(3))
-            
+#New Helper Function for Chart Descriptions python
+def _get_chart_description(focus, detail_level, selected_categories_count):
+    """Get dynamic chart description based on focus and detail level"""
+    
+    chart_types = {
+        "Expenses": {
+            "Summary": "Expense Overview with Key Metrics",
+            "By Category": "Expense Distribution by Category",
+            "Trend Over Time": "Monthly Expense Trends", 
+            "Detailed Breakdown": "Comprehensive Expense Analysis with Multiple Charts"
+        },
+        "Income": {
+            "Summary": "Income Overview with Key Metrics", 
+            "By Category": "Income Sources Breakdown",
+            "Trend Over Time": "Monthly Income Trends",
+            "Detailed Breakdown": "Comprehensive Income Analysis with Multiple Charts"
+        },
+        "Savings": {
+            "Summary": "Savings Overview with Net Position",
+            "By Category": "Savings by Period", 
+            "Trend Over Time": "Savings Accumulation Over Time",
+            "Detailed Breakdown": "Comprehensive Savings Analysis with Trends"
+        },
+        "Comparison": {
+            "Summary": "Income vs Expenses Comparison",
+            "By Category": "Category-wise Income vs Expense Comparison",
+            "Trend Over Time": "Income & Expense Trends Over Time",
+            "Detailed Breakdown": "Comprehensive Financial Comparison Dashboard"
+        }
+    }
+    
+    base_description = chart_types.get(focus, {}).get(detail_level, "Custom Chart")
+    
+    # Add category info if specific categories are selected
+    if selected_categories_count > 0:
+        if selected_categories_count == 1:
+            base_description += " (Single Category Focus)"
+        else:
+            base_description += f" ({selected_categories_count} Categories)"
+    
+    return base_description
+
 def _apply_visual_filters(df: pd.DataFrame, components: Dict) -> pd.DataFrame:
-    """Apply filters based on visual query components WITH ROBUST CATEGORY FILTERING"""
+    """Apply filters based on visual query components WITH MULTI-CATEGORY SUPPORT"""
     if df is None or df.empty:
         return pd.DataFrame()
     
@@ -1141,14 +1197,15 @@ def _apply_visual_filters(df: pd.DataFrame, components: Dict) -> pd.DataFrame:
     if time_period != "All Time":
         filtered_df = _apply_time_filter_to_df(filtered_df, time_period)
     
-    # Apply category filter - ROBUST FILTERING
-    specific_category = components.get('specific_category', 'All Categories')
-    if specific_category != "All Categories":
-        # Case-insensitive, trimmed comparison
-        filtered_df = filtered_df[
-            filtered_df['category'].astype(str).str.strip().str.lower() == 
-            specific_category.strip().lower()
-        ]
+    # Apply category filter - MULTI-CATEGORY SUPPORT
+    specific_categories = components.get('specific_categories', [])
+    if specific_categories:
+        # Case-insensitive, trimmed comparison for multiple categories
+        category_mask = False
+        for category in specific_categories:
+            category_lower = category.strip().lower()
+            category_mask |= (filtered_df['category'].astype(str).str.strip().str.lower() == category_lower)
+        filtered_df = filtered_df[category_mask]
     
     # Apply amount filter
     min_amount = components.get('min_amount', 0)
