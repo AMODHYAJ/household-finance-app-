@@ -828,13 +828,13 @@ def charts_page():
     df = data_agent.get_transactions_df()
     
     if df is not None and not df.empty:
-        # Tab layout for different chart types - REMOVED NLP TAB
+        # Tab layout for different chart types
         tab1, tab2, tab3, tab4, tab5 = st.tabs([
             "📊 Basic Charts", 
             "🎯 Interactive Dashboard", 
             "🔍 Comparative Analysis",
             "🔮 Predictive Charts",
-            "🎨 Visual Query Builder"  # Renamed and enhanced
+            "🎨 Visual Query Builder"
         ])
         
         with tab1:
@@ -863,19 +863,19 @@ def charts_page():
                         st.subheader("Expenses by Category")
                         fig, caption = chart_agent.pie_expenses_by_category(save=False, show=False, time_range=time_range_param)
                         st.plotly_chart(fig, use_container_width=True)
-                        _display_caption(caption)
+                        _display_enhanced_caption(caption, "Expenses by Category Analysis")  # FIXED: Added original_query
                     
                     if chart_type in ["Income vs Expenses", "All Basic Charts"]:
                         st.subheader("Income vs Expenses")
                         fig, caption = chart_agent.bar_income_vs_expense(time_range=time_range_param)
                         st.plotly_chart(fig, use_container_width=True)
-                        _display_caption(caption)
+                        _display_enhanced_caption(caption, "Income vs Expenses Comparison")  # FIXED: Added original_query
                     
                     if chart_type in ["Savings Over Time", "All Basic Charts"]:
                         st.subheader("Savings Over Time")
                         fig, caption = chart_agent.line_savings_over_time(time_range=time_range_param)
                         st.plotly_chart(fig, use_container_width=True)
-                        _display_caption(caption)
+                        _display_enhanced_caption(caption, "Savings Trend Analysis")  # FIXED: Added original_query
         
         with tab2:
             st.subheader("🎯 Interactive Dashboard")
@@ -924,8 +924,18 @@ def charts_page():
                             'type': transaction_types if transaction_types else None,
                             'date_range': date_range if len(date_range) == 2 else None
                         }
-                        fig = chart_agent.create_interactive_dashboard(filters)
-                        st.plotly_chart(fig, use_container_width=True)
+                        result = chart_agent.create_interactive_dashboard(filters)
+                        
+                        # Handle both return types: figure only OR (figure, caption) tuple
+                        if isinstance(result, tuple) and len(result) == 2:
+                            fig, caption = result
+                            st.plotly_chart(fig, use_container_width=True)
+                            _display_enhanced_caption(caption, "Interactive Dashboard")  # Display the caption
+                        else:
+                            # If it returns just the figure
+                            fig = result
+                            st.plotly_chart(fig, use_container_width=True)
+                            
                         st.success("✅ Dashboard generated successfully!")
                     except Exception as e:
                         st.error(f"❌ Failed to create dashboard: {str(e)}")
@@ -945,12 +955,13 @@ def charts_page():
                               key="period2")
             
             if st.button("Compare Periods", key="compare_btn"):
-                fig, caption = chart_agent.comparative_charts(
-                    period1.lower().replace(" ", "_"), 
-                    period2.lower().replace(" ", "_")
-                )
-                st.plotly_chart(fig, use_container_width=True)
-                _display_caption(caption)
+                with st.spinner("Generating comparison..."):
+                    fig, caption = chart_agent.comparative_charts(
+                        period1.lower().replace(" ", "_"), 
+                        period2.lower().replace(" ", "_")
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+                    _display_enhanced_caption(caption, f"Compare {period1} vs {period2}")  # FIXED: Added original_query
         
         with tab4:
             st.subheader("🔮 Predictive Financial Charts")
@@ -958,15 +969,19 @@ def charts_page():
             periods = st.slider("Months to Predict", 1, 12, 6, key="prediction_slider")
             
             if st.button("Generate Predictions", key="predict_btn"):
-                fig, caption = chart_agent.predictive_charts(periods)
-                st.plotly_chart(fig, use_container_width=True)
-                _display_caption(caption)
+                with st.spinner("Generating predictions..."):
+                    fig, caption = chart_agent.predictive_charts(periods)
+                    st.plotly_chart(fig, use_container_width=True)
+                    _display_enhanced_caption(caption, f"Predict next {periods} months")  # FIXED: Added original_query
         
         with tab5:
             _render_enhanced_visual_query_builder(chart_agent, df)
                 
     else:
         st.info("No data available for charts. Add some transactions first!")
+        if st.button("Add Your First Transaction"):
+            st.session_state.page = "Add Transaction"
+            st.rerun()
 
 def _render_enhanced_visual_query_builder(chart_agent, df):
     """Render the enhanced Visual Query Builder tab content"""
@@ -1135,7 +1150,6 @@ def _render_enhanced_visual_query_builder(chart_agent, df):
                 del st.session_state[key]
         st.rerun()
 
-#New Helper Function for Chart Descriptions python
 def _get_chart_description(focus, detail_level, selected_categories_count):
     """Get dynamic chart description based on focus and detail level"""
     
@@ -1177,76 +1191,6 @@ def _get_chart_description(focus, detail_level, selected_categories_count):
     
     return base_description
 
-def _apply_visual_filters(df: pd.DataFrame, components: Dict) -> pd.DataFrame:
-    """Apply filters based on visual query components WITH MULTI-CATEGORY SUPPORT"""
-    if df is None or df.empty:
-        return pd.DataFrame()
-    
-    filtered_df = df.copy()
-    
-    # Apply chart focus filter
-    chart_focus = components.get('chart_focus', 'Expenses')
-    if chart_focus == 'Expenses':
-        filtered_df = filtered_df[filtered_df['type'] == 'expense']
-    elif chart_focus == 'Income':
-        filtered_df = filtered_df[filtered_df['type'] == 'income']
-    # For 'Savings' and 'Comparison', we keep both types
-    
-    # Apply time filter
-    time_period = components.get('time_period', 'All Time')
-    if time_period != "All Time":
-        filtered_df = _apply_time_filter_to_df(filtered_df, time_period)
-    
-    # Apply category filter - MULTI-CATEGORY SUPPORT
-    specific_categories = components.get('specific_categories', [])
-    if specific_categories:
-        # Case-insensitive, trimmed comparison for multiple categories
-        category_mask = False
-        for category in specific_categories:
-            category_lower = category.strip().lower()
-            category_mask |= (filtered_df['category'].astype(str).str.strip().str.lower() == category_lower)
-        filtered_df = filtered_df[category_mask]
-    
-    # Apply amount filter
-    min_amount = components.get('min_amount', 0)
-    if min_amount > 0:
-        filtered_df = filtered_df[filtered_df['amount'] >= min_amount]
-    
-    return filtered_df
-
-def _apply_time_filter_to_df(df: pd.DataFrame, time_period: str) -> pd.DataFrame:
-    """Apply time filter to dataframe for visual query builder"""
-    df_copy = df.copy()
-    
-    # Ensure date column is properly converted
-    if 'date' in df_copy.columns:
-        df_copy['date'] = pd.to_datetime(df_copy['date'], errors='coerce')
-        df_copy = df_copy.dropna(subset=['date'])
-    
-    if df_copy.empty:
-        return df_copy
-    
-    now = datetime.now()
-    if time_period == 'This Month':
-        start_date = now.replace(day=1)
-        return df_copy[df_copy['date'] >= start_date]
-    elif time_period == 'Last Month':
-        first_day_this_month = now.replace(day=1)
-        last_day_last_month = first_day_this_month - timedelta(days=1)
-        first_day_last_month = last_day_last_month.replace(day=1)
-        return df_copy[
-            (df_copy['date'] >= first_day_last_month) & 
-            (df_copy['date'] <= last_day_last_month)
-        ]
-    elif time_period == 'Last 3 Months':
-        cutoff = now - timedelta(days=90)
-        return df_copy[df_copy['date'] >= cutoff]
-    elif time_period == 'This Year':
-        start_date = now.replace(month=1, day=1)
-        return df_copy[df_copy['date'] >= start_date]
-    else:  # All Time
-        return df_copy
-
 def _display_visual_builder_caption(caption, components):
     """Display caption for visual query builder charts"""
     if not isinstance(caption, dict):
@@ -1265,7 +1209,7 @@ def _display_visual_builder_caption(caption, components):
             <p><strong>Focus:</strong> {components.get('chart_focus', 'N/A')}</p>
             <p><strong>Time Period:</strong> {components.get('time_period', 'N/A')}</p>
             <p><strong>Detail Level:</strong> {components.get('detail_level', 'N/A')}</p>
-            <p><strong>Category:</strong> {components.get('specific_category', 'All Categories')}</p>
+            <p><strong>Categories:</strong> {', '.join(components.get('specific_categories', ['All Categories']))}</p>
         </div>
         """, unsafe_allow_html=True)
     
@@ -1299,7 +1243,175 @@ def _display_visual_builder_caption(caption, components):
             <p style="color: #155724;">{caption.get('enhanced_insights')}</p>
         </div>
         """, unsafe_allow_html=True)
-        
+
+def _display_enhanced_caption(caption, original_query):  # ← ADD this parameter
+    """Display enhanced chart caption with better formatting"""
+    if not isinstance(caption, dict):
+        return
+    
+    st.markdown("---")
+    st.subheader("📋 Chart Explanation")
+    
+    # Create a more comprehensive caption display
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown(f"""
+        <div style="background-color: #f8f9fa; padding: 1rem; border-radius: 10px; border-left: 4px solid #1f77b4;">
+            <h4 style="color: #1f77b4; margin-bottom: 1rem;">🔍 Query Analysis</h4>
+            <p><strong>Your Query:</strong> "{original_query}"</p>  # ← USE the parameter here
+            <p><strong>Understood Intent:</strong> {str(caption.get('understood_intent', 'N/A')).replace('_', ' ').title() if caption.get('understood_intent') is not None else 'N/A'}</p>
+            <p><strong>Confidence Level:</strong> {caption.get('confidence_level', 'N/A')}</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col2:
+        st.markdown(f"""
+        <div style="background-color: #f8f9fa; padding: 1rem; border-radius: 10px; border-left: 4px solid #28a745;">
+            <h4 style="color: #28a745; margin-bottom: 1rem;">📊 Chart Details</h4>
+            <p><strong>Chart Type:</strong> {str(caption.get('chart_type_used', 'N/A')).title() if caption.get('chart_type_used') is not None else 'N/A'}</p>
+            <p><strong>Time Period:</strong> {str(caption.get('time_period_analyzed', 'N/A')).replace('_', ' ').title() if caption.get('time_period_analyzed') is not None else 'N/A'}</p>
+            <p><strong>Data Focus:</strong> {str(caption.get('data_focus', 'N/A')).title() if caption.get('data_focus') is not None else 'N/A'}</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    # Key Insights section
+    if caption.get('key_insights'):
+        st.markdown(f"""
+        <div style="background-color: #fff3cd; padding: 1rem; border-radius: 10px; border-left: 4px solid #ffc107; margin-top: 1rem;">
+            <h4 style="color: #856404; margin-bottom: 1rem;">💡 Key Insights</h4>
+            <p style="color: #856404;">{caption.get('key_insights', 'No specific insights available.')}</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    # Analysis Reasoning
+    if caption.get('analysis_reasoning'):
+        st.markdown("**🔎 Analysis Reasoning:**")
+        reasoning = caption.get('analysis_reasoning', [])
+        if isinstance(reasoning, list):
+            for reason in reasoning:
+                st.write(f"- {reason}")
+        else:
+            st.write(f"- {reasoning}")
+    
+    # Full Summary
+    if caption.get('summary'):
+        st.markdown(f"""
+        <div style="background-color: #e7f3ff; padding: 1rem; border-radius: 10px; margin-top: 1rem;">
+            <p><strong>📝 Summary:</strong> {caption.get('summary')}</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+def _display_caption(caption):
+    """Display chart caption in a formatted box with dark text"""
+    if isinstance(caption, dict):
+        # Handle the new enhanced caption format
+        if 'key_insights' in caption:
+            _display_enhanced_caption(caption)
+        else:
+            # Fallback to original format for backward compatibility
+            st.markdown(f"""
+            <div style="background-color: #f8f9fa; padding: 1rem; border-radius: 10px; border-left: 4px solid #1f77b4;">
+                <h4 style="color: #1f77b4; margin-bottom: 1rem;">📋 Chart Explanation</h4>
+                <p><strong>What's being compared:</strong> {caption.get('comparison', 'N/A')}</p>
+                <p><strong>Chart type reasoning:</strong> {caption.get('reasoning', 'N/A')}</p>
+                <p><strong>Key insight:</strong> {caption.get('insights', 'N/A')}</p>
+            </div>
+            """, unsafe_allow_html=True)
+    else:
+        st.info("📋 Chart generated successfully!")
+
+def _create_empty_chart(message):
+    """Create an empty chart with a message"""
+    fig = go.Figure()
+    fig.add_annotation(
+        text=message,
+        xref="paper", yref="paper",
+        x=0.5, y=0.5, xanchor="center", yanchor="middle",
+        showarrow=False, 
+        font=dict(size=16, color="#7f8c8d")
+    )
+    fig.update_layout(
+        title=message,
+        template="plotly_white",
+        height=400
+    )
+    return fig
+
+def _apply_visual_filters(df: pd.DataFrame, components: Dict) -> pd.DataFrame:
+    """Apply filters based on visual query components with multi-category support"""
+    if df is None or df.empty:
+        return pd.DataFrame()
+    
+    filtered_df = df.copy()
+    
+    chart_focus = components.get('chart_focus', 'Expenses')
+    if chart_focus == 'Expenses':
+        filtered_df = filtered_df[filtered_df['type'] == 'expense']
+    elif chart_focus == 'Income':
+        filtered_df = filtered_df[filtered_df['type'] == 'income']
+    
+    time_period = components.get('time_period', 'All Time')
+    if time_period != "All Time":
+        filtered_df = _apply_time_filter_to_df(filtered_df, time_period)
+    
+    specific_categories = components.get('specific_categories', [])
+    if specific_categories and "All Categories" not in specific_categories:
+        category_mask = False
+        for category in specific_categories:
+            category_lower = category.strip().lower()
+            category_mask |= (filtered_df['category'].astype(str).str.strip().str.lower() == category_lower)
+        filtered_df = filtered_df[category_mask]
+    
+    min_amount = components.get('min_amount', 0)
+    if min_amount > 0:
+        filtered_df = filtered_df[filtered_df['amount'] >= min_amount]
+    
+    return filtered_df
+
+def _apply_time_filter_to_df(df: pd.DataFrame, time_period: str) -> pd.DataFrame:
+    """Apply time filter to dataframe for visual query builder"""
+    df_copy = df.copy()
+    
+    if 'date' in df_copy.columns:
+        df_copy['date'] = pd.to_datetime(df_copy['date'], errors='coerce')
+        df_copy = df_copy.dropna(subset=['date'])
+    
+    if df_copy.empty:
+        return df_copy
+    
+    now = datetime.now()
+    if time_period == 'This Month':
+        start_date = now.replace(day=1)
+        return df_copy[df_copy['date'] >= start_date]
+    elif time_period == 'Last Month':
+        first_day_this_month = now.replace(day=1)
+        last_day_last_month = first_day_this_month - timedelta(days=1)
+        first_day_last_month = last_day_last_month.replace(day=1)
+        return df_copy[
+            (df_copy['date'] >= first_day_last_month) & 
+            (df_copy['date'] <= last_day_last_month)
+        ]
+    elif time_period == 'Last 3 Months':
+        cutoff = now - timedelta(days=90)
+        return df_copy[df_copy['date'] >= cutoff]
+    elif time_period == 'This Year':
+        start_date = now.replace(month=1, day=1)
+        return df_copy[df_copy['date'] >= start_date]
+    else:
+        return df_copy
+
+def _get_time_range_param(time_range):
+    """Convert time range selection to parameter"""
+    range_map = {
+        "Last 3 Months": "last_3_months",
+        "Last 6 Months": "last_6_months", 
+        "This Year": "this_year",
+        "All": None
+    }
+    return range_map.get(time_range, None)
+
+
 def insights_page():
     import streamlit as st
     from agents.insight_generator import InsightGeneratorAgent
